@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pipeline/.venv/bin/osm2pcg:*)",
+      "Bash(tools/build_ue.sh:*)",
+      "Bash(tools/ue_run.sh:*)",
+      "Bash(tools/regen.sh:*)",
+      "Bash(uv:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
+    ]
+  }
+}

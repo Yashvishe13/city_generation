@@ -1,0 +1,22 @@
+# --- Unreal (required exclusions for submission)
+UnrealProject/Binaries/
+UnrealProject/Intermediate/
+UnrealProject/Saved/
+UnrealProject/DerivedDataCache/
+UnrealProject/Build/
+UnrealProject/.vs/
+UnrealProject/*.xcworkspace/
+UnrealProject/*.xcodeproj/
+UnrealProject/Script/
+
+# --- Python
+pipeline/.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+
+# --- Data: keep translated exports, drop the bulky raw Overpass cache
+data/raw/osm_*.json
+
+# --- OS
+.DS_Store
