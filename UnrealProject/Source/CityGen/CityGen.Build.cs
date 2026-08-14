@@ -21,6 +21,8 @@ public class CityGen : ModuleRules
 			"GeometryScriptingCore",
 			// PCG graph integration
 			"PCG",
+			// Dynamic mesh data type + Spawn Dynamic Mesh node used by the graph
+			"PCGGeometryScriptInterop",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

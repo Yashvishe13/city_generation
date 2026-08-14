@@ -19,9 +19,14 @@ data/out/<area>/      Translated exports
 UnrealProject/        UE 5.7 project "CityGen"
   Source/CityGen/     C++ module
     OSMCityData.*     FOSMCity structs + JSON loader (UOSMCityDataLibrary)
-    OSMCityBuilder.*  AOSMCityBuilder: dynamic-mesh generation from FOSMCity
+    OSMCityGeometry.* UOSMCityGeometry: footprint extrusion, road ribbons, ground
+    PCGOSMCity.*      UPCGOSMCitySettings: PCG source node (the graded path)
+    CityGeneratorActor.* ACityGeneratorActor: PCGComponent host, parent of BP_CityGenerator
+    OSMCityBuilder.*  AOSMCityBuilder: same geometry without PCG (preview/reference)
   Content/Data/       city.json + CSVs the UE side reads at generate time
   Content/Maps/       CityLevel.umap (default map)
+  Content/PCG/        PCG_City graph
+  Content/Blueprints/ BP_CityGenerator
   Scripts/            UE editor Python (asset/level authoring, headless)
 tools/                regen.sh / build_ue.sh / ue_run.sh
 docs/                 report.md, previews, notes
@@ -56,6 +61,17 @@ tools/regen.sh midtown                              # full pipeline → level
 Areas are presets in `pipeline/osm2pcg/config.py` (`midtown`, `midtown_small`, `loop`).
 `midtown_small` is the fast iteration area (~340 buildings).
 
+## PCG wiring
+
+`PCG_City` = `OSM City Source` (custom C++ node, 4 output pins) → three
+`Spawn Dynamic Mesh` nodes for Buildings / Roads / Ground. `RoadSplines` is emitted
+but unconnected, ready for a spline-mesh road pass. Spawned components are PCG-managed,
+so regeneration replaces them instead of stacking.
+
+`BP_CityGenerator` derives from `ACityGeneratorActor`, which owns the `PCGComponent`
+and calls `Generate` from its construction script — opening `CityLevel` regenerates
+the city with no manual step. `Generate City` / `Cleanup City` buttons force it.
+
 ## UE specifics worth remembering
 
 - Editor Python is the authoring path for anything asset-shaped (levels, DataTables,
@@ -66,12 +82,24 @@ Areas are presets in `pipeline/osm2pcg/config.py` (`midtown`, `midtown_small`, `
   `bBuildOnConstruction` → `build_on_construction`.
 - Geometry from `GeometryScriptingCore`
   (`UGeometryScriptLibrary_MeshPrimitiveFunctions::AppendSimpleExtrudePolygon`, etc.).
+- Node layout is `node.set_node_position(x, y)`, not editor properties.
+- `PCGComponent::Graph` is protected — use `set_graph()` from Python.
+- A `PCGComponent` whose actor has no volume logs "Component has invalid bounds, not
+  registered" and silently generates nothing; `ACityGeneratorActor` therefore roots a
+  `UBoxComponent` (`BoundsExtentCm`).
+- `GenerateOnLoad` fires for game worlds, *not* when the editor opens a map — hence the
+  construction-script trigger.
+- PCG generation is asynchronous and cannot be flushed inside a `-run=pythonscript`
+  commandlet. Headless runs only schedule it; verify by launching the editor and
+  grepping `~/Library/Logs/Unreal Engine/CityGenEditor/CityGen.log` for
+  `OSM City Source` (the project's `Saved/Logs` stays empty on Mac).
 
 ## State / next steps
 
-Done: pipeline (fetch→export), C++ loader + dynamic-mesh builder, headless `CityLevel`
-authoring, verified 343 buildings / 41 roads for `midtown_small`.
+Done: pipeline (fetch→export); C++ loader, shared geometry lib; PCG source node +
+`PCG_City` graph + `BP_CityGenerator`; non-PCG reference builder; headless authoring of
+everything. Verified live in the editor: `midtown_small` → 343 buildings, 41 road
+ribbons, 41 splines.
 
-Next: PCG graph (`BP_CityGenerator` / `PCG_City`) that consumes the same exports —
-buildings as PCG points + dynamic-mesh extrusion, roads as PCG splines; then
-report.md with the overhead side-by-side, then demo.mp4.
+Next: run the bigger `midtown` area; road spline meshes off the `RoadSplines` pin;
+`report.md` with the overhead side-by-side; `demo/demo.mp4` (30–90 s, hard gate).

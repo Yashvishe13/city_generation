@@ -9,4 +9,5 @@ AREA="${1:-midtown}"
 # The PCG graph / builder reads Content/Data/city.json.
 cp "$REPO_ROOT/data/out/$AREA/city.json" "$REPO_ROOT/UnrealProject/Content/Data/city.json"
 "$REPO_ROOT/tools/build_ue.sh"
+"$REPO_ROOT/tools/ue_run.sh" UnrealProject/Scripts/build_pcg_graph.py
 "$REPO_ROOT/tools/ue_run.sh" UnrealProject/Scripts/bootstrap_city_level.py

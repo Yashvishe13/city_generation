@@ -53,9 +53,17 @@ Overpass API ──fetch──► data/raw/osm_<area>.json
                    UnrealProject/Content/Data/city.json
                         │  UOSMCityDataLibrary::LoadCityFromJsonFile
                         ▼
-                   AOSMCityBuilder → dynamic meshes (buildings / roads / ground)
-                   + PCG graph consuming the same data (in progress)
+     PCG_City graph:  OSM City Source ──Buildings──► Spawn Dynamic Mesh
+                                      ──Roads─────► Spawn Dynamic Mesh
+                                      ──Ground────► Spawn Dynamic Mesh
+                                      ──RoadSplines► (spare pin for spline meshes)
+                        │  run by the PCGComponent on BP_CityGenerator in CityLevel
+                        ▼
+                   PCG-managed dynamic mesh components (regenerate = replace)
 ```
+
+`AOSMCityBuilder` builds the identical geometry without PCG; both call
+`UOSMCityGeometry`, so the reference path and the PCG path cannot drift.
 
 `manifest.json` records the exact projection string, origin lat/lon, scene bounds and a
 histogram of where each building's height came from — everything needed to re-run or
@@ -71,9 +79,9 @@ than guessed.
 ## Status
 
 - [x] Fetch / parse / project / export (`pipeline/osm2pcg`)
-- [x] C++ loader + dynamic-mesh generation (`AOSMCityBuilder`)
+- [x] C++ loader + dynamic-mesh generation (`UOSMCityGeometry`)
 - [x] Headless, reproducible `CityLevel` authoring
-- [ ] PCG graph / `BP_CityGenerator` consuming the same exports
+- [x] PCG graph `PCG_City` + `BP_CityGenerator` consuming the same exports
 - [ ] `report.md` with overhead generated-vs-OSM side-by-side
 - [ ] `demo/demo.mp4` (30–90 s fly-through)
 
