@@ -61,11 +61,12 @@ def main(argv: list[str] | None = None) -> int:
     export_mod.write_geojson(features, args.raw_dir / f"{area.name}.geojson")
 
     frame = build_frame(area)
-    scene = export_mod.translate(features, frame)
+    scene, part_stats = export_mod.translate(features, frame)
 
     out_dir = args.out_dir / area.name
     ue_dir = args.ue_data_dir if str(args.ue_data_dir) else None
-    manifest = export_mod.write_all(scene, area, frame, out_dir, ue_data_dir=ue_dir)
+    manifest = export_mod.write_all(
+        scene, area, frame, out_dir, ue_data_dir=ue_dir, part_stats=part_stats)
     print("[run] manifest:\n" + json.dumps(manifest, indent=2))
 
     if not args.no_preview:

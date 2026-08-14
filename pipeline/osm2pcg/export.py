@@ -8,6 +8,7 @@ from typing import Any
 
 from shapely.geometry import LineString
 
+from . import parts as parts_mod
 from .config import AreaConfig
 from .project import LocalFrame, clean_polygon, oriented_box, UE_UNITS_PER_M
 
@@ -23,13 +24,27 @@ def _pack(points: list[tuple[float, float]]) -> str:
     return "|".join(f"{_r(x)} {_r(y)}" for x, y in points)
 
 
-def translate(features: dict[str, list[dict]], frame: LocalFrame) -> dict[str, Any]:
-    """Project every feature into UE centimetres and derive per-feature metadata."""
+def translate(
+    features: dict[str, list[dict]], frame: LocalFrame
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Project every feature into UE centimetres and derive per-feature metadata.
+
+    Returns (scene, building_part_stats).
+    """
+    # Project first, then resolve building:part vs parent envelopes in metric space.
+    projected: list[dict[str, Any]] = []
+    for src in features["buildings"]:
+        poly = clean_polygon(frame.ring_to_metres(src["ring"]))
+        if poly is not None:
+            projected.append({"poly": poly, "is_part": src["is_part"], "src": src})
+
+    resolved, part_stats = parts_mod.resolve(projected)
+    print(f"[translate] building:part resolution {part_stats}")
+
     buildings: list[dict] = []
-    for b in features["buildings"]:
-        poly = clean_polygon(frame.ring_to_metres(b["ring"]))
-        if poly is None:
-            continue
+    for record in resolved:
+        poly = record["poly"]
+        b = record["src"]
         obb = oriented_box(poly)
         outline_ue = [
             frame.metres_to_ue(e, n) for e, n in list(poly.exterior.coords)[:-1]
@@ -100,12 +115,13 @@ def translate(features: dict[str, list[dict]], frame: LocalFrame) -> dict[str, A
             })
         return out
 
-    return {
+    scene = {
         "buildings": buildings,
         "roads": roads,
         "water": _areas("water"),
         "green": _areas("green"),
     }
+    return scene, part_stats
 
 
 def scene_bounds(scene: dict[str, Any]) -> dict[str, float]:
@@ -133,6 +149,7 @@ def write_all(
     frame: LocalFrame,
     out_dir: Path,
     ue_data_dir: Path | None = None,
+    part_stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -150,6 +167,7 @@ def write_all(
         "counts": {k: len(v) for k, v in scene.items()},
         "bounds_ue_cm": scene_bounds(scene),
         "height_sources": _height_source_counts(scene["buildings"]),
+        "building_part_resolution": part_stats or {},
         "tallest_building_cm": max((b["height_cm"] for b in scene["buildings"]), default=0),
     }
 

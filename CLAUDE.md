@@ -44,6 +44,11 @@ demo/                 demo.mp4 (mandatory 30–90 s)
   `AppendSimpleExtrudePolygon` produces inside-out solids on CW input.
 - **Heights**: `height` tag → `building:levels × 3.2 m` → per-`building=*` estimate →
   12 m default. Every building carries `height_source` so the report can quantify this.
+- **`building:part` vs parent** (`parts.py`): a parent envelope covered ≥55% by its
+  parts is dropped (the parts *are* the massing); parts under 40 m² are ornaments and
+  dropped; parts not claimed by a parent are dropped. Extruding both parent and parts
+  double-builds every tower and turns spires into free-standing needles — do not
+  "simplify" this away. Stats land in `manifest.json.building_part_resolution`.
 - **Reproducibility**: anything in `Content/Data` or the level must be regenerable by
   `tools/regen.sh <area>`. No hand-placed geometry. Re-running clears before building
   (`AOSMCityBuilder::ClearCity`), so no stale actors/meshes.
