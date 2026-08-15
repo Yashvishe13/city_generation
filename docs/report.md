@@ -11,9 +11,9 @@ derived from the source extract by a translator that runs end to end from one co
 
 |                   |                                                                                                                            |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Place**         | Midtown Manhattan, New York City, USA — Bryant Park and the blocks around it, between roughly 40th–42nd St and 5th–6th Ave |
+| **Place** | Midtown Manhattan, New York City, USA — West/East 36th to 45th Street, 6th Avenue to Park Avenue. Bryant Park and the New York Public Library sit in the north-west quadrant |
 | **Bounding box**  | `south 40.7500, west −73.9860, north 40.7555, east −73.9790` (WGS84)                                                       |
-| **Ground extent** | 611 m north–south × 591 m east–west                                                                                        |
+| **Ground extent** | 611 m north–south × 591 m east–west = 0.36 km², about **27 Manhattan blocks** (9 street intervals × 3 avenue intervals) |
 | **Source**        | [OpenStreetMap](https://www.openstreetmap.org/#map=17/40.75275/-73.98250) via the [Overpass API](https://overpass-api.de/) |
 | **Snapshot**      | Pinned with `[date:"2026-08-15T00:00:00Z"]`, so a re-run returns the same data                                             |
 | **Licence**       | Data © OpenStreetMap contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/)                                  |
@@ -27,6 +27,12 @@ guesswork: 606 of 713 buildings state `height`, and 1,078 of 1,083 `building:par
 volumes state their own. It also contains every hard case in one place — parts overlapping
 their parents, roofs with `roof:height`, setbacks starting above ground, and **zero** roads
 carrying a `width` tag.
+
+The scope is deliberate: a few city blocks to a small district. At 0.36 km² this sits at
+the district end — 27 blocks, 1,651 building volumes, 18.7 km of carriageway — large
+enough that the street grid, the block structure and a real skyline range (3.7 m to 397 m)
+are all present, and small enough that every feature can be checked against the source
+rather than sampled.
 
 ---
 
