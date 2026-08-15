@@ -11,14 +11,16 @@ Writes <project>/Saved/Screenshots/overhead_ue.png.
 """
 import unreal
 
-SHOT_PX = 2048
-# Frame the REQUESTED area, not the scene bounds: the scene currently overruns its bbox,
-# and a shot framed on the overrun buries the area under empty ground slab.
-FRAME_HALF_M = 330.0
-# The editor viewport renders at ~90 deg FOV, and setting camera info does not change it,
-# so visible half-width on the ground is approximately the camera height. Measured, not
+SHOT_PX = 4096
+# Shoot high and crop, rather than framing tight. A perspective viewport seen from 330 m
+# over a 600 m area leans every tower outward from the centre, which cannot be laid beside
+# a north-up map. From 1200 m the same area subtends a quarter of the frame and reads
+# nearly orthographic; tools/crop_overhead.py then cuts out exactly the requested bbox.
+#
+# The editor viewport renders at ~90 deg FOV and set_level_viewport_camera_info does not
+# change it, so visible half-width on the ground equals the camera height. Measured, not
 # assumed: at Z = 1200 m the frame covered ~2.4 km.
-CAMERA_Z_CM = FRAME_HALF_M * 100.0
+CAMERA_Z_CM = 120000.0
 
 
 def _scene_centre_and_extent():
@@ -50,7 +52,8 @@ def _scene_centre_and_extent():
 def main():
     centre, half = _scene_centre_and_extent()
     unreal.log(f"[overhead] centre={centre} scene_half_cm={half:.0f} "
-               f"framing {FRAME_HALF_M:.0f} m half-width")
+               f"camera {CAMERA_Z_CM / 100:.0f} m up, frame ~{2 * CAMERA_Z_CM / 100:.0f} m "
+               f"wide at {SHOT_PX} px")
 
     # Straight down: pitch -90. Yaw 0 keeps +X (North) pointing up the frame, so the
     # image reads the same way as a north-up map - the whole point of the axis choice.

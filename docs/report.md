@@ -8,15 +8,17 @@ derived from the source extract by a translator that runs end to end from one co
 
 ## 1. Area and data source
 
-| | |
-|---|---|
-| **Place** | Midtown Manhattan, New York City, USA — Bryant Park and the blocks around it, between roughly 40th–42nd St and 5th–6th Ave |
-| **Bounding box** | `south 40.7500, west −73.9860, north 40.7555, east −73.9790` (WGS84) |
-| **Ground extent** | 611 m north–south × 591 m east–west |
-| **Source** | [OpenStreetMap](https://www.openstreetmap.org/#map=17/40.75275/-73.98250) via the [Overpass API](https://overpass-api.de/) |
-| **Snapshot** | Pinned with `[date:"2026-08-15T00:00:00Z"]`, so a re-run returns the same data |
-| **Licence** | Data © OpenStreetMap contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) |
-| **Extract** | 3,024 elements, fetched with a 150 m buffer so boundary features arrive whole |
+
+|                   |                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Place**         | Midtown Manhattan, New York City, USA — Bryant Park and the blocks around it, between roughly 40th–42nd St and 5th–6th Ave |
+| **Bounding box**  | `south 40.7500, west −73.9860, north 40.7555, east −73.9790` (WGS84)                                                       |
+| **Ground extent** | 611 m north–south × 591 m east–west                                                                                        |
+| **Source**        | [OpenStreetMap](https://www.openstreetmap.org/#map=17/40.75275/-73.98250) via the [Overpass API](https://overpass-api.de/) |
+| **Snapshot**      | Pinned with `[date:"2026-08-15T00:00:00Z"]`, so a re-run returns the same data                                             |
+| **Licence**       | Data © OpenStreetMap contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/)                                  |
+| **Extract**       | 3,024 elements, fetched with a 150 m buffer so boundary features arrive whole                                              |
+
 
 The area was chosen by measurement rather than taste. Twenty-three candidate districts
 were scored on **how much of their footprint area has a stated height rather than a
@@ -28,7 +30,11 @@ carrying a `width` tag.
 
 ---
 
+
+
 ## 2. The pipeline
+
+
 
 ### Data flow
 
@@ -62,13 +68,13 @@ byte-identical file.
 ### Projection and origin
 
 - **Origin**: the centre of the *requested* bbox — `40.75275, −73.98250`. The 150 m fetch
-  buffer deliberately does not move it.
+buffer deliberately does not move it.
 - **Projection**: a local tangent plane at the origin, using the WGS84 radii of curvature
-  (meridional and normal) rather than a spherical approximation. `111320·cos(lat)` drifts
-  0.1–0.2% per kilometre, which is metres of error across a city block.
+(meridional and normal) rather than a spherical approximation. `111320·cos(lat)` drifts
+0.1–0.2% per kilometre, which is metres of error across a city block.
 - **Units**: centimetres, rounded to whole cm on output.
 - **Axes**: `+X = North`, `+Y = East`, `+Z = Up`. A top-down view in the editor therefore
-  reads north-up and east-right, matching a map.
+reads north-up and east-right, matching a map.
 
 Checked against an independent Vincenty computation: **0.0000% north–south, 0.0001%
 east–west** scale error. The verifier reprojects 409 sampled vertices with its own
@@ -78,34 +84,36 @@ implementation and finds a worst-case deviation of **0.7 cm**.
 
 Preference order, with every result carrying its provenance in the node's `attrs`:
 
-| source | volumes | share |
-|---|---|---|
-| `tag:height` — stated by OSM | 1,608 | **97.4%** |
-| `knn[...]` — fitted from this area | 35 | 2.1% |
-| `building:levels × 3.883 m` | 5 | 0.3% |
-| `area_median:26.25m` | 3 | 0.2% |
+
+| source                             | volumes | share     |
+| ---------------------------------- | ------- | --------- |
+| `tag:height` — stated by OSM       | 1,608   | **97.4%** |
+| `knn[...]` — fitted from this area | 35      | 2.1%      |
+| `building:levels × 3.883 m`        | 5       | 0.3%      |
+| `area_median:26.25m`               | 3       | 0.2%      |
+
 
 - **Storey height** was fitted here, not carried in: 119 buildings in this extract state
-  both `height` and `building:levels`, giving a median of **3.883 m/storey**
-  (leave-one-out MedAE 2.52 m).
+both `height` and `building:levels`, giving a median of **3.883 m/storey**
+(leave-one-out MedAE 2.52 m).
 - **The estimator had to earn its place.** kNN over log footprint area, type-restricted
-  where a `building=*` type had ≥7 labelled peers, *k* chosen by leave-one-out over
-  {3,5,7,9,11,15} → k=15, **MedAE 6.60 m against the area-median baseline's 12.35 m**.
-  Type medians (MedAE 10.7 m) and spatial neighbours were tried and dropped — in Midtown a
-  tower sits next to a loft, and nearly every building is `building=yes`.
-- **`building:part` resolves against its parent.** 120 parent outlines are suppressed
-  because their parts describe the massing; extruding both would double-build every tower
-  and bury the setbacks inside a slab. 185 volumes start above ground from `min_height` /
-  `building:min_level`.
+where a `building=*` type had ≥7 labelled peers, *k* chosen by leave-one-out over
+{3,5,7,9,11,15} → k=15, **MedAE 6.60 m against the area-median baseline's 12.35 m**.
+Type medians (MedAE 10.7 m) and spatial neighbours were tried and dropped — in Midtown a
+tower sits next to a loft, and nearly every building is `building=yes`.
+- `building:part` **resolves against its parent.** 120 parent outlines are suppressed
+because their parts describe the massing; extruding both would double-build every tower
+and bury the setbacks inside a slab. 185 volumes start above ground from `min_height` /
+`building:min_level`.
 - **Roof height is contained in the total height** (OSM Simple 3D Buildings), so walls stop
-  at `height − roof:height`. 114 roof meshes for 115 non-flat `roof:shape` values.
+at `height − roof:height`. 114 roof meshes for 115 non-flat `roof:shape` values.
 - **Nothing is dropped for lacking a height.** A footprint with an honestly-labelled
-  estimate beats a hole in the city.
+estimate beats a hole in the city.
 
 Resulting distribution: median **45.2 m**, 90th percentile 105 m, max **397 m** (the Empire
 State Building's roof — correctly excluding its 443 m antenna, which is a separate part).
 
-Road widths could not be fitted at all: **no driveable way in this extract states `width`**.
+Road widths could not be fitted at all: **no driveable way in this extract states** `width`.
 Rather than invent one, the widths are composed from the cross-section the data *does*
 state — `lanes`, `lanes:bus`, `parking:*=lane`, `cycleway:*=lane|track` — multiplied by
 NYCDOT Street Design Manual figures, and every one is labelled as borrowed, e.g.
@@ -117,11 +125,13 @@ NYCDOT Street Design Manual figures, and every one is labelled as borrowed, e.g.
 no tag names, no highway classes, no roof vocabulary. Everything arrives as one of three
 geometric primitives:
 
-| kind | geometry | used for |
-|---|---|---|
-| `extrude` | closed CCW ring + `base_cm` + `height_cm` | building volumes, any prism |
-| `mesh` | indexed triangles, absolute coordinates | roofs, plazas, sidewalks, junctions |
-| `ribbon` | polyline + `width_cm` | road carriageways |
+
+| kind      | geometry                                  | used for                            |
+| --------- | ----------------------------------------- | ----------------------------------- |
+| `extrude` | closed CCW ring + `base_cm` + `height_cm` | building volumes, any prism         |
+| `mesh`    | indexed triangles, absolute coordinates   | roofs, plazas, sidewalks, junctions |
+| `ribbon`  | polyline + `width_cm`                     | road carriageways                   |
+
 
 `kind` is a *geometric primitive, never a feature type* — a canal would be a `ribbon`
 tagged `water`. That is what lets a new feature class ship without touching C++.
@@ -152,31 +162,61 @@ LogPCGOSMCity: OSM City Source: area 'nyc_midtown' -> 1651 extruded, 5028 triang
 
 ---
 
+
+
 ## 3. Visual comparison
 
-**Generated scene in Unreal Engine 5.7**, top-down from 330 m. Bryant Park is centre-left
-with its path network; the New York Public Library is the stepped block on its east edge.
+**Left: OpenStreetMap. Right: the generated city in Unreal Engine 5.7.** Same ground, same
+extent, same scale, north up in both — 611 x 591 m, the requested bbox exactly, at 1.71
+pixels per metre.
 
-![Generated city in UE 5.7, overhead](overhead_ue.png)
+<table>
+<tr>
+<td width="50%"><img src="overhead_osm.png" alt="OpenStreetMap source, overhead" width="100%"></td>
+<td width="50%"><img src="overhead_ue.png" alt="Generated city in Unreal Engine 5.7, overhead" width="100%"></td>
+</tr>
+<tr>
+<td align="center"><em>OpenStreetMap source</em></td>
+<td align="center"><em>Generated, in Unreal Engine 5.7</em></td>
+</tr>
+</table>
 
-Below, the same ground drawn twice from the two ends of the pipeline — **left: the
-OpenStreetMap source**, **right: the emitted `scene.json`** — in one projection and one
-viewport, north up, 100 m scale bar:
+Bryant Park sits upper-left in both, with the New York Public Library as the large block on
+its east edge; the ~29-degree-east-of-north street grid, the block pattern and the
+individual footprints register between the panels.
 
-| OpenStreetMap source | Generated scene |
-|---|---|
-| ![OSM source](overhead_osm.svg) | ![Generated scene](overhead_scene.svg) |
+The UE panel is a real editor screenshot, not a re-render of the data: taken top-down from
+1,200 m at 4096 px and cropped to the requested bbox, so that the perspective is mild
+enough to lay beside a map. Shot high and cropped deliberately - from 330 m the same
+viewport leans every tower outward from the centre, which cannot honestly be compared with
+an overhead map. Buildings still lean slightly towards the frame edges; that is a
+perspective viewport, not a projection error in the data.
 
-Roads read differently between the two panels by nature, not by error: OSM stores road
+Roads read differently between the panels by nature, not by error: OSM stores road
 **centrelines** with no width, while the scene carries **derived carriageway widths** plus
 sidewalks, plazas and junction caps. That difference is most of what the translation does.
 
-Both panels come from `tools/render_overhead.py`, which re-derives from the source files
-with the same projection the pipeline uses — standard library only, deterministic.
+The same ground once more, drawn from the emitted `scene.json` rather than screenshotted -
+useful for reading the data as data, with buildings shaded by height:
+
+<img src="overhead_scene.svg" alt="Generated scene drawn from scene.json" width="100%">
+
+Reproduce all three:
+
+```bash
+tools/render_overhead.py --area nyc_midtown     # SVG panels, from source and from scene
+# take the capture:
+#   UnrealEditor CityGen.uproject -ExecCmds="py UnrealProject/Scripts/overhead_shot.py"
+tools/crop_overhead.py --area nyc_midtown       # crop to the bbox, match the pair
+```
 
 ---
 
+
+
 ## 4. Self-assessment
+
+
 
 ### What matches well
 
@@ -269,24 +309,26 @@ is emitted but unconsumed — the road pass is ribbons, not spline meshes.
 ### What I would improve with more time, in priority order
 
 1. **Subway infrastructure as its own layer.** Exclude below-grade buildings from the
-   street-level massing (the same `layer`/`location` test already used for footways and
+  street-level massing (the same `layer`/`location` test already used for footways and
    railways), then decide what an underground network should actually look like — station
    volumes, platforms and passages at their stated `layer`, rather than either standing on
    the street or vanishing. Fixes the extent overrun as a side effect rather than as a
    trim.
 2. **Curbs as prisms.** A one-primitive change from `mesh` to `extrude` that fixes every
-   raised pedestrian surface at street level.
+  raised pedestrian surface at street level.
 3. **Ground cover** — add `leisure`, `landuse`, `natural`, `water` to the selectors and
-   stack them in the 0–4 cm band beneath the carriageway, excluding the 58 below-grade
+  stack them in the 0–4 cm band beneath the carriageway, excluding the 58 below-grade
    `railway=subway` ways. Bryant Park becomes a park.
 4. **Blocks from the road graph.** A city block is not an OSM object — this extract has
-   three `landuse=commercial` polygons for dozens of blocks — so they would have to be
+  three `landuse=commercial` polygons for dozens of blocks — so they would have to be
    derived as faces of the road network, inset by half the adjacent street widths.
 5. **Spline-mesh roads** off the `RoadSplines` pin, with lane markings, which is what the
-   pin was left connected-ready for.
+  pin was left connected-ready for.
 6. **A height-fidelity metric.** The verifier currently checks that heights come from real
-   tags; it does not measure *error*. Holding out stated heights and scoring the estimator
+  tags; it does not measure *error*. Holding out stated heights and scoring the estimator
    against them per-area would turn "plausible" into a number.
+
+
 
 ### Verification
 
