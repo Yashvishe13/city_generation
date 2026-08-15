@@ -75,7 +75,7 @@ York's subway complexes as buildings: Grand Central Terminal, Times Square-42nd 
 34th Street-Herald Square each carry `building=train_station` with `location=underground`
 and `layer=-1`/`-2`. Extruded at grade they are solid blocks spanning up to 737 m across
 Midtown, and three of them took the scene to roughly six times the requested ground area
-on their own - which read for a while like a boundary-clipping problem and was not.
+on their own.
 
 The `layer` / `tunnel` / `location` test that keeps 88 indoor footways and 58
 `railway=subway` ways out of the street network applies to **buildings too**. A below-grade

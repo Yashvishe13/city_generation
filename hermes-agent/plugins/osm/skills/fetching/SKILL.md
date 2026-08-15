@@ -110,34 +110,10 @@ requested bbox**, so buffering must never move it (`osm:coordinates`). Buffer wi
 `buffer_m` — around 150 m — so features straddling the boundary come back whole rather
 than arriving as fragments.
 
-## The extent you get back is larger than the extent you asked for
-
-Overpass returns any way that *intersects* the query box **in its entirety**, so a 150 m
-buffer does not give you a 150 m margin — it gives you every long avenue and every large
-feature that so much as clips the corner, at full length.
-
-`out geom(south,west,north,east)` exists and clips server-side, but it only filters
-*existing* vertices: it cannot synthesise a vertex on the boundary, so a segment that
-crosses keeps its far endpoint, and on a straight avenue consecutive nodes can be hundreds
-of metres apart. Measured on Midtown it took the extent from 6.2x the requested area to
-2.3x, not to 1x. Applied to buildings it is worse than useless - it truncates footprints
-into **broken rings**.
-
-**Do not build a clipping stage.** Keeping boundary features whole is the correct
-behaviour and is what the buffer was bought for; a footprint cut in half is an open prism
-and a worse error than a little margin. Record the emitted extent alongside
-`bbox_requested` in the manifest so the difference is visible, and leave it there.
-
-What is *not* acceptable is a handful of enormous features silently setting the extent. On
-this project three did: Grand Central Terminal, Times Square-42nd Street and 34th
-Street-Herald Square, each tagged `building=train_station` with `location=underground` and
-`layer=-1`/`-2`, spanning up to 737 m, extruded as though they stood on the street. Those
-three took the scene to ~6x the requested area on their own, and the boundary had almost
-nothing to do with it.
-
-That is a below-grade bug, not a boundary bug - the exclusion rule in `osm:roads` applies
-just as much to buildings. **If your emitted extent is several times the request, find the
-largest few features and read their tags before assuming the boundary is at fault.**
+Overpass returns any intersecting way *in full*, so what comes back always covers more
+ground than the box you asked for. That is the API, and boundary features arriving
+complete is the point of the buffer. Record the extent you actually emit in the manifest
+next to `bbox_requested` so the difference is visible rather than surprising.
 
 ## Areas
 

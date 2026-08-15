@@ -205,8 +205,7 @@ fetch, translate, verify.
 ### Known limitations
 
 **Three underground subway complexes are extruded as above-ground buildings, and they
-inflate the scene to ~6× the requested area.** This is the biggest defect, and it is not a
-clipping problem — it is a below-grade problem.
+inflate the scene to ~6× the requested area.** This is the biggest defect.
 
 OSM tags New York's station complexes as buildings:
 

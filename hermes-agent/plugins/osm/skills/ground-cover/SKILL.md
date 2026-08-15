@@ -64,9 +64,9 @@ same ground z-fight (`osm:scene-contract`). Two rules keep it clean:
   landuse → park/garden → pitch/playground → flowerbed → water. Give each step its own Z,
   a centimetre or two apart. The smaller polygon is always on top, which is also what it
   looks like in reality.
-- **Or subtract**, if you would rather have one surface per patch of ground: clip the
-  parent to exclude the children. More correct, more work, and it needs a polygon
-  difference you would have to write.
+- **Or subtract**, if you would rather have one surface per patch of ground: cut the
+  children out of the parent so each patch is covered once. More correct, more work, and
+  it needs a polygon difference you would have to write.
 
 Pick one and say which. What you may not do is emit a park and a garden at the same Z.
 
@@ -135,6 +135,6 @@ be the ground.
 
 ## 7. Report
 
-Per class: polygons emitted, polygons clipped to the requested bbox, polygons excluded
-below grade, and the Z assigned to each class. The Z table is the part a reviewer needs,
-because it is the only way to check the stack without opening the scene.
+Per class: polygons emitted, polygons excluded below grade, and the Z assigned to each
+class. The Z table is the part a reviewer needs, because it is the only way to check the
+stack without opening the scene.
