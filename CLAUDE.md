@@ -188,5 +188,6 @@ success without asserting. The verifier now carries a `height_provenance` check 
 compares the emitted `height_source` histogram against the tag coverage in the source
 extract, which catches exactly that class of failure: geometry perfect, meaning gone.
 
-Next: roof meshes off the tagged shapes; road spline meshes off the `RoadSplines` pin;
-`report.md` with the overhead side-by-side; `demo/demo.mp4` (30–90 s, hard gate).
+Next: clip the scene to the requested bbox (57% of volumes currently fall outside it);
+curbs as `extrude` prisms rather than flat plates; ground cover; road spline meshes off
+the `RoadSplines` pin; `demo/demo.mp4` (30–90 s, hard gate). `docs/report.md` is written.
