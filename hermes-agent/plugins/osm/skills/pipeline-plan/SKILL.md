@@ -70,6 +70,18 @@ and 9 pedestrian streets. Midtown shipped with no pedestrian surface at all. Bot
 failures come from treating `highway` as one thing. It is not: the data labels these
 subsets, and the fix is a curb height, not an exclusion. See `osm:roads`.
 
+**Extruding below-grade buildings as though they stood on the street.** OSM tags New
+York's subway complexes as buildings: Grand Central Terminal, Times Square-42nd Street and
+34th Street-Herald Square each carry `building=train_station` with `location=underground`
+and `layer=-1`/`-2`. Extruded at grade they are solid blocks spanning up to 737 m across
+Midtown, and three of them took the scene to roughly six times the requested ground area
+on their own - which read for a while like a boundary-clipping problem and was not.
+
+The `layer` / `tunnel` / `location` test that keeps 88 indoor footways and 58
+`railway=subway` ways out of the street network applies to **buildings too**. A below-grade
+building is not a volume at ground level. (Modelling the underground properly - stations,
+platforms, passages at their stated `layer` - is worth doing; putting it at Z=0 is not.)
+
 **Dropping buildings that lack a height.** Refusing to invent a height is right; deleting
 the building is not. Footprint fidelity is the most heavily weighted thing being judged,
 so a footprint with an honestly-labelled fallback height beats a hole in the city. Keep

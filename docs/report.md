@@ -204,13 +204,45 @@ fetch, translate, verify.
 
 ### Known limitations
 
-**The scene overruns its bounding box, and this is the biggest defect.** Overpass returns
-any way that *intersects* the query box in full, so a 150 m buffer did not produce a 150 m
-margin: the scene spans roughly 1,440 × 1,570 m for a 611 × 591 m request. **57% of the
-volumes and 73% of the ribbons sit outside the area that was asked for.** Nothing clips on
-the way out and the manifest does not mention it. The fix is understood — clip buildings
-whole-or-not by centroid, clip polylines and polygons at the boundary — but it is not in
-this build.
+**Three underground subway complexes are extruded as above-ground buildings, and they
+inflate the scene to ~6× the requested area.** This is the biggest defect, and it is not a
+clipping problem — it is a below-grade problem.
+
+OSM tags New York's station complexes as buildings:
+
+```
+relation/11171793  Grand Central Terminal                     737 × 494 m
+relation/11171765  Times Square–42nd St / Port Authority      556 × 435 m
+way/812938420      34th Street–Herald Square                  382 × 220 m
+
+  building = train_station     location = underground     layer = -1 / -2
+```
+
+All three are currently built as solid volumes standing on the street. They are also
+enormous — an underground concourse spans several city blocks — so they alone drive the
+building extent from 1,078 × 1,057 m to **1,259 × 1,565 m**, against a 611 × 591 m
+request. Three features out of 1,779.
+
+The pipeline is not inventing this and it is not fetching the wrong area: it reads the
+correct bbox from `data/areas.json`, and the extent of what it emits matches the extent of
+what Overpass returned **to the metre** (1,438 × 1,567 m both). It faithfully translates a
+response that contains three very large things that should never have been above ground.
+
+The rule to fix it already exists elsewhere in this project — `layer`, `tunnel` and
+`location` are checked to exclude 88 indoor/tunnel footways and 58 `railway=subway` ways —
+it is simply **missing on the buildings path**. A below-grade building is not a volume.
+
+Deferred deliberately: the correct treatment of subway infrastructure is its own piece of
+work (stations, platforms and passages are a coherent underground layer, not noise to
+discard), and it is scheduled rather than patched. Until then the extent overrun is a
+known and understood consequence, not an unexplained one.
+
+Ordinary boundary overrun is a separate and much smaller effect. Overpass returns any way
+that *intersects* the query box in full, so a 150 m buffer does not produce a 150 m margin.
+That is inherent to the API — `out geom(bbox)` clips server-side but only filters existing
+vertices, so it cannot cut a segment at the boundary either, and applied to buildings it
+would truncate footprints into broken rings. Keeping boundary buildings whole is the
+correct behaviour and costs roughly one building of margin.
 
 **Raised pedestrian surfaces are flat plates, not prisms.** Sidewalks sit at Z = +19 cm and
 plazas at +16 cm with every vertex at a single height, so they have a walking surface but
@@ -237,8 +269,12 @@ is emitted but unconsumed — the road pass is ribbons, not spline meshes.
 
 ### What I would improve with more time, in priority order
 
-1. **Clip to the requested bbox.** Highest value per hour by a wide margin, and it makes
-   the deliverable match its own stated extent.
+1. **Subway infrastructure as its own layer.** Exclude below-grade buildings from the
+   street-level massing (the same `layer`/`location` test already used for footways and
+   railways), then decide what an underground network should actually look like — station
+   volumes, platforms and passages at their stated `layer`, rather than either standing on
+   the street or vanishing. Fixes the extent overrun as a side effect rather than as a
+   trim.
 2. **Curbs as prisms.** A one-primitive change from `mesh` to `extrude` that fixes every
    raised pedestrian surface at street level.
 3. **Ground cover** — add `leisure`, `landuse`, `natural`, `water` to the selectors and

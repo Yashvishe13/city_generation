@@ -39,10 +39,12 @@ It must handle, because this area contains all of it:
 - roads with NO width tag anywhere in this area;
 - buildings stating neither height nor levels.
 
-Emit ONLY the requested bbox. The 150 m buffer exists so boundary features come back
-whole, not to enlarge the area: Overpass returns any intersecting way in full, so the
-previous run shipped a scene 1440 x 1570 m for a 610 x 590 m request - 57% of volumes
-outside the area asked for. Clip on the way out and count what the clip removed.
+Do NOT build a clipping stage; keeping boundary features whole is correct. But check
+your emitted extent against the requested bbox and report it. Last run it was 1438 x 1567 m
+for a 611 x 591 m request, and the cause was three below-grade features extruded at street
+level - Grand Central Terminal, Times Square-42nd St and 34th St-Herald Square, all tagged
+building=train_station with location=underground and layer<0, up to 737 m across. Apply the
+same layer/tunnel/location test to buildings that you apply to highways and railways.
 
 Ground cover is not in the default selectors and must be added: leisure, landuse,
 natural, water, waterway, railway. In this bbox that is ~303 elements, mostly Bryant

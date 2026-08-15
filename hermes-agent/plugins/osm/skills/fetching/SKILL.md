@@ -110,34 +110,34 @@ requested bbox**, so buffering must never move it (`osm:coordinates`). Buffer wi
 `buffer_m` — around 150 m — so features straddling the boundary come back whole rather
 than arriving as fragments.
 
-## Fetch wide, emit narrow
+## The extent you get back is larger than the extent you asked for
 
-**The buffer is for the fetch. It is not for the scene.** Overpass returns any way that
-*intersects* the query box in its entirety, so a 150 m buffer does not give you a 150 m
-margin — it gives you every long street and every large building that so much as clips
-the corner, at full length. Left unclipped, a 610 × 590 m request produced a scene
-spanning 1440 × 1570 m: **57% of the volumes and 73% of the ribbons were outside the area
-that was asked for**, roughly six times the ground area, and nothing said so.
+Overpass returns any way that *intersects* the query box **in its entirety**, so a 150 m
+buffer does not give you a 150 m margin — it gives you every long avenue and every large
+feature that so much as clips the corner, at full length.
 
-That is not extra value. The deliverable is *this* area, it is what a reviewer compares
-against a map of *this* area, and a scene six times too big is wrong in the one dimension
-the brief actually fixed.
+`out geom(south,west,north,east)` exists and clips server-side, but it only filters
+*existing* vertices: it cannot synthesise a vertex on the boundary, so a segment that
+crosses keeps its far endpoint, and on a straight avenue consecutive nodes can be hundreds
+of metres apart. Measured on Midtown it took the extent from 6.2x the requested area to
+2.3x, not to 1x. Applied to buildings it is worse than useless - it truncates footprints
+into **broken rings**.
 
-So clip on the way out, against `bbox_requested`, projected into the same cm frame:
+**Do not build a clipping stage.** Keeping boundary features whole is the correct
+behaviour and is what the buffer was bought for; a footprint cut in half is an open prism
+and a worse error than a little margin. Record the emitted extent alongside
+`bbox_requested` in the manifest so the difference is visible, and leave it there.
 
-- **Buildings**: keep whole, drop whole. Decide by centroid, or by intersection if you
-  prefer a full edge — never cut a footprint in half, which produces open prisms and
-  buildings sliced down the middle. This is what the buffer was *for*: a building on the
-  boundary is complete because you over-fetched.
-- **Ribbons and open polylines**: clip the line at the boundary. A road ending at the
-  edge of the area is correct and expected.
-- **Surface polygons** (plazas, parks, landuse): clip the polygon. The clip region is an
-  axis-aligned rectangle, so Sutherland–Hodgman against four half-planes is about twenty
-  lines and needs no library.
+What is *not* acceptable is a handful of enormous features silently setting the extent. On
+this project three did: Grand Central Terminal, Times Square-42nd Street and 34th
+Street-Herald Square, each tagged `building=train_station` with `location=underground` and
+`layer=-1`/`-2`, spanning up to 737 m, extruded as though they stood on the street. Those
+three took the scene to ~6x the requested area on their own, and the boundary had almost
+nothing to do with it.
 
-Then **count what the clip removed, by kind**, and record the clipped extent in the
-manifest next to `bbox_requested`. A reviewer must be able to see that the scene covers
-the area asked for and no more.
+That is a below-grade bug, not a boundary bug - the exclusion rule in `osm:roads` applies
+just as much to buildings. **If your emitted extent is several times the request, find the
+largest few features and read their tags before assuming the boundary is at fault.**
 
 ## Areas
 
