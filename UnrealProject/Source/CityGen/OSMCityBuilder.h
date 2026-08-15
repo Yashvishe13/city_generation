@@ -19,9 +19,9 @@ class CITYGEN_API AOSMCityBuilder : public AActor
 public:
 	AOSMCityBuilder();
 
-	/** Path to city.json; relative paths resolve against the project Content dir. */
+	/** Directory of converter output; relative paths resolve against Content. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OSM|Source")
-	FString CityDataPath = TEXT("Data/city.json");
+	FString CityDataDir = TEXT("Data/City");
 
 	/** Rebuild whenever the actor is moved/edited in the editor. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OSM|Source")

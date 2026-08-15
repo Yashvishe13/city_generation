@@ -1,0 +1,19 @@
+Extend scripts/convert_to_ue.py (which you wrote) to also emit road centrelines, keeping
+everything already working exactly as it is.
+
+Add data/ue/nyc_midtown/roads.json: one record per centreline with osm_id, class, name,
+points (polyline in UE centimetres, same origin/axes as the buildings), width_cm,
+width_source, and layer/bridge/tunnel flags.
+
+No road in this area carries a `width` tag - I checked. So derive width: use `lanes` where
+present (state your metres-per-lane), otherwise fall back to a per-class default table you
+justify. Record which of those produced each number in width_source.
+
+Decide which highway classes to include - the goal is a drivable/walkable road network for
+a city reconstruction, not every footpath and stairway - and say what you included and why.
+Note some ways are tunnels or have a layer tag; a tunnel drawn at street level would be
+wrong.
+
+Update manifest.json with road counts, total centreline length in km, and the
+width_source breakdown. Then run it and report the numbers.
+Do not modify any other file.

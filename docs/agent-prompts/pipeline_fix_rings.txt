@@ -1,0 +1,21 @@
+Fix three bugs in agent_scripts/nyc_midtown/pipeline.py. Nothing else - keep every other
+behaviour exactly as it is.
+
+tools/verify_area.sh nyc_midtown currently reports:
+
+  ring_winding           1007 exterior rings are clockwise; extrusion comes out inside-out
+  ring_shape             1777 rings are degenerate or repeat their first vertex
+  ring_self_intersection 758 rings self-intersect
+
+The three share one root cause: OSM closes a ring by repeating its first vertex, the
+contract does not, and that repeated vertex also makes a naive self-intersection test fire
+on nearly every building. Strip the duplicate first, then decide winding from the shoelace
+sign of the coordinates you are about to emit, reversing when negative.
+
+Also add `attrs.osm_id` to every node, carrying the source OSM id. Without it the
+verifier's projection check cannot match your geometry back to the source, and that is the
+check that catches a wrong origin or swapped axes.
+
+Then run the pipeline, and run tools/verify_area.sh nyc_midtown. Both must be real runs:
+your files are checked on disk for modification time and the verifier is re-run
+independently, so a report of success the files do not support will be rejected.

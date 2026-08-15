@@ -1,0 +1,21 @@
+Write scripts/convert_to_ue.py (Python 3, standard library only - pyproj and shapely are NOT installed).
+
+It reads data/raw/nyc_midtown.geojson and data/raw/nyc_midtown.fetch.json and writes
+data/ue/nyc_midtown/buildings.json plus data/ue/nyc_midtown/manifest.json.
+
+Coordinates: origin = centre of bbox_requested_south_west_north_east in the fetch.json.
+Project lon/lat to metres locally (your choice of projection - document it), then to
+centimetres. Axis convention: UE +X = North, +Y = East, +Z = Up.
+
+Each building record: osm_id, kind, outline (exterior ring, counter-clockwise in (X,Y),
+first vertex NOT repeated), holes, height_cm, base_cm, height_source, centroid.
+Height: explicit `height` tag; else `building:levels` x a storey height you state; else a
+per-area estimate you justify. Note that `roof:height` is contained in `height`.
+`building:part` polygons overlap their parent `building` outline - extruding both
+double-builds every tower, so resolve that and report the rule and the counts.
+
+manifest.json: origin lat/lon, projection description, units, axis convention, counts,
+scene bounds in cm, height_source breakdown.
+
+Then run it and report the numbers. Roads come in a later step - do not do them now.
+Do not modify any other file.

@@ -1,0 +1,26 @@
+Continue the nyc_midtown pipeline you wrote (agent_scripts/nyc_midtown/pipeline.py).
+
+osm_verify_scene now reports two gaps in your output:
+
+  [error]   road_coverage: the source has 388 highway ways but the scene has no ribbon nodes
+  [warning] roof_coverage: the source tags 61 non-flat roof shapes but the scene has no mesh nodes
+
+Your earlier instructions deferred these to "steps 2 and 3" - this is that step. Add both,
+keeping the extrude path exactly as it behaves now.
+
+ROADS as `ribbon` nodes: pick which highway classes belong in a drivable/walkable network
+and say why. No way in this area states a `width`, so derive it and record width_source
+per node. Carry the layer/tunnel information, since a tunnel drawn at street level would
+pave over the road above it.
+
+ROOFS as `mesh` nodes: indexed triangles, shared vertices, wound counter-clockwise seen
+from outside, sitting on the wall top your extrude path already computes (you already
+subtract roof:height from the total). Cover the shapes this area actually tags; anything
+you do not model falls back to flat and is COUNTED in the manifest, not silently dropped.
+
+Re-read osm:scene-contract if you need the exact node shapes.
+
+Then run the pipeline, call osm_verify_scene, and fix whatever it reports until it is
+clean. Report: which classes you included and why, the width and roof-height provenance
+breakdowns, the fallback counts, the verifier's final result, and confirmation that a
+second run is byte-identical.

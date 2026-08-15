@@ -1,0 +1,31 @@
+You are writing the OpenStreetMap -> Unreal pipeline for ONE area: nyc_midtown
+(Midtown Manhattan, bbox south=40.7500 west=-73.9860 north=40.7555 east=-73.9790).
+This is step 1 of 3; later steps continue this same conversation, so record what you
+learn as you go.
+
+Load these skills first - they are the contract you write against:
+  osm:scene-contract, osm:coordinates, osm:estimation
+
+Analysis tools: osm_fetch_area, osm_list_areas, osm_tag_stats, osm_quality_check.
+You already have analysis scripts in agent_scripts/nyc_midtown/ from an earlier attempt -
+reuse them rather than starting over.
+
+STEP 1 SCOPE - the volumes only. Write agent_scripts/nyc_midtown/pipeline.py:
+- Python 3, standard library ONLY (no pyproj/shapely/numpy).
+- Self-contained: fetches from Overpass, caches the download, and writes
+  data/ue/nyc_midtown/scene.json.
+- CLI: --area (default nyc_midtown), --repo, --force, --verify.
+- Deterministic: same input -> byte-identical output.
+- Emit ONLY `extrude` nodes in this step, plus the manifest. Roofs (mesh nodes) and roads
+  (ribbon nodes) come in steps 2 and 3, so structure the code to make those easy to add.
+
+It must handle: building:part volumes overlapping their parent outlines (extruding both
+double-builds every tower), parts starting above ground (min_height / building:min_level),
+roof:height being contained in the total height, and buildings stating neither height nor
+levels.
+
+Fit what you need from THIS area's data and say where each number came from. A constant
+fitted from Midtown is correct here; a number with no stated origin is not.
+
+Then run it, and report: what the analysis showed, what you fitted and from what sample
+size, how many volumes you emitted, and what the parent/part rule kept or dropped.

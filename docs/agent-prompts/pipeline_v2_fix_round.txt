@@ -1,0 +1,18 @@
+Your pipeline ran, but osm_verify_scene rejected the output:
+
+  ring_winding           1007 exterior rings are clockwise; extrusion comes out inside-out
+  ring_shape             1777 rings are degenerate or repeat their first vertex
+  ring_self_intersection 758 rings self-intersect
+  projection             could not match any emitted outline back to a source polygon
+  roof_coverage          the source tags 115 non-flat roof shapes but the scene has no mesh nodes
+
+Fix them in agent_scripts/nyc_midtown/pipeline.py. Re-read osm:scene-contract - it now
+describes the two traps behind the ring failures.
+
+Carry the source OSM id per node (attrs.osm_id) so the verifier can check your geometry
+against the original extract; without it the projection check cannot run at all, which is
+the check that would catch a wrong origin or swapped axes.
+
+Then run the pipeline, call osm_verify_scene again, and quote what it actually returns.
+Keep iterating until it reports ok, or tell me plainly which failure you could not fix and
+why.

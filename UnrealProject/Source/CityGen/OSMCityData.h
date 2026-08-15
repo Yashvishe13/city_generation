@@ -1,106 +1,107 @@
-// Data model for the artefacts produced by pipeline/osm2pcg.
-// All coordinates are already in UE centimetres, in the pipeline's convention:
-//   +X = North, +Y = East, +Z = Up, origin = the area's bbox centre.
+// Data model for the scene contract produced by a generated pipeline
+// (agent_scripts/<area>/pipeline.py -> data/ue/<area>/scene.json).
+//
+// The engine knows three geometric primitives and nothing about OpenStreetMap: no tag
+// names, no highway classes, no roof vocabulary. Semantics travel as opaque tags.
+// All coordinates are UE centimetres: +X = North, +Y = East, +Z = Up, origin = the
+// area's bbox centre.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "OSMCityData.generated.h"
 
-/** One OSM building footprint plus its derived height. */
+/** One closed ring. A struct because UPROPERTY cannot hold a nested TArray<TArray<>>. */
 USTRUCT(BlueprintType)
-struct FOSMBuilding
+struct FOSMRing
 {
 	GENERATED_BODY()
 
-	/** OSM way/relation id, kept so generated geometry can be traced back to source. */
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	int64 OsmId = 0;
+	TArray<FVector2D> Points;
+};
+
+/** kind: "extrude" - a closed ring swept from BaseCm to HeightCm. */
+USTRUCT(BlueprintType)
+struct FOSMExtrude
+{
+	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	FString Kind;
+	FString Id;
 
-	/** Extrusion height in cm (from height / building:levels tags, else estimated). */
+	/** Exterior ring, CCW, first vertex not repeated. */
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	float HeightCm = 0.f;
+	TArray<FVector2D> Outline;
 
-	/** Ground offset in cm for building:part / min_height. Usually 0. */
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	TArray<FOSMRing> Holes;
+
+	/** Absolute bottom and absolute top, cm. The sweep is the difference. */
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
 	float BaseCm = 0.f;
 
-	/** "tag:height" | "tag:levels" | "estimate:type=..." | "estimate:default". */
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	FString HeightSource;
+	float HeightCm = 0.f;
+
+	/** Opaque labels from the pipeline, e.g. "building", "building:part". */
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	TArray<FString> Tags;
+
+	/** Footprint area, cm^2, computed on load. */
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	float AreaCm2 = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
 	FVector2D CentroidCm = FVector2D::ZeroVector;
-
-	/** Footprint exterior ring, CCW, not closed (first point is not repeated). */
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FVector2D> OutlineCm;
-
-	/** Minimum-area oriented bounding box, for the simple box-per-building path. */
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	FVector2D BoxCenterCm = FVector2D::ZeroVector;
-
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	float BoxLengthCm = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	float BoxWidthCm = 0.f;
-
-	/** Yaw of the box long axis, degrees about +Z, measured from +X toward +Y. */
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	float BoxYawDeg = 0.f;
 };
 
-/** One OSM highway centreline. */
+/** kind: "mesh" - indexed triangles in absolute world centimetres. */
 USTRUCT(BlueprintType)
-struct FOSMRoad
+struct FOSMMesh
 {
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	int64 OsmId = 0;
-
-	/** OSM highway=* value, e.g. "primary", "residential". */
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	FString RoadClass;
+	FString Id;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	FString RoadName;
+	TArray<FVector> Vertices;
 
-	/** Full carriageway width in cm (from width tag, else per-class default). */
+	/** Three consecutive entries per triangle, indexing into Vertices. */
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	TArray<int32> Indices;
+
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	TArray<FString> Tags;
+};
+
+/** kind: "ribbon" - a polyline widened into a flat strip. */
+USTRUCT(BlueprintType)
+struct FOSMRibbon
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	TArray<FVector2D> Points;
+
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
 	float WidthCm = 0.f;
 
-	/** OSM layer tag; >0 for bridges, <0 for tunnels. */
+	/** Vertical ordering hint; negative sits below grade. */
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
 	int32 Layer = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FVector2D> PointsCm;
+	TArray<FString> Tags;
 };
 
-/** Water / park / landuse polygon. */
+/** A translated area: the contents of data/ue/<area>/scene.json. */
 USTRUCT(BlueprintType)
-struct FOSMAreaPoly
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	int64 OsmId = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	FString Kind;
-
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FVector2D> OutlineCm;
-};
-
-/** Whole translated area: the parsed contents of data/out/<area>/city.json. */
-USTRUCT(BlueprintType)
-struct FOSMCity
+struct FOSMScene
 {
 	GENERATED_BODY()
 
@@ -114,20 +115,21 @@ struct FOSMCity
 	double OriginLon = 0.0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FOSMBuilding> Buildings;
+	TArray<FOSMExtrude> Extrudes;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FOSMRoad> Roads;
+	TArray<FOSMMesh> Meshes;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FOSMAreaPoly> Water;
+	TArray<FOSMRibbon> Ribbons;
 
-	UPROPERTY(BlueprintReadOnly, Category = "OSM")
-	TArray<FOSMAreaPoly> Green;
-
-	/** XY extent of all imported geometry, cm. */
+	/** XY extent of everything loaded, cm. */
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
 	FBox2D BoundsCm = FBox2D(ForceInit);
+
+	/** Nodes whose kind this engine does not build, counted rather than hidden. */
+	UPROPERTY(BlueprintReadOnly, Category = "OSM")
+	int32 SkippedNodes = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "OSM")
 	bool bValid = false;
@@ -140,15 +142,11 @@ class CITYGEN_API UOSMCityDataLibrary : public UBlueprintFunctionLibrary
 
 public:
 	/**
-	 * Load a city.json produced by `osm2pcg`.
-	 * @param FilePath absolute path, or a path relative to the project Content dir.
+	 * Load data/ue/<area>/scene.json.
+	 * @param DirPath absolute, or relative to the project Content dir.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OSM")
-	static bool LoadCityFromJsonFile(const FString& FilePath, FOSMCity& OutCity, FString& OutError);
-
-	/** Same, from an in-memory JSON string. */
-	UFUNCTION(BlueprintCallable, Category = "OSM")
-	static bool LoadCityFromJsonString(const FString& Json, FOSMCity& OutCity, FString& OutError);
+	static bool LoadSceneFromDirectory(const FString& DirPath, FOSMScene& OutScene, FString& OutError);
 
 	/** Resolve a possibly-relative data path against the project Content dir. */
 	UFUNCTION(BlueprintPure, Category = "OSM")

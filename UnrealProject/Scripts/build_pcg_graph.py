@@ -2,10 +2,8 @@
 
 Graph shape:
 
-    OSM City Source ──Buildings──► Spawn Dynamic Mesh (buildings)
-                    ──Roads─────► Spawn Dynamic Mesh (roads)
-                    ──Ground────► Spawn Dynamic Mesh (ground)
-                    ──RoadSplines► (left unconnected: available for spline meshes)
+    OSM City Source ──Meshes──► Spawn Dynamic Mesh
+                    ──Splines─► (left unconnected: available for spline meshes)
 
 BP_CityGenerator is an Actor with a PCGComponent whose graph is PCG_City.
 
@@ -22,10 +20,11 @@ BP_PACKAGE = "/Game/Blueprints"
 BP_NAME = "BP_CityGenerator"
 BP_PATH = f"{BP_PACKAGE}/{BP_NAME}"
 
-CITY_DATA_PATH = "Data/city.json"  # relative to <project>/Content
+CITY_DATA_DIR = "Data/City"  # relative to <project>/Content; area-neutral slot
 
 IN_PIN = "In"  # PCGPinConstants::DefaultInputLabel
-MESH_PINS = ("Buildings", "Roads", "Ground")
+# One mesh pin: every kind of geometry arrives tagged on it.
+MESH_PIN = "Meshes"
 
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 
@@ -44,13 +43,13 @@ def build_graph():
     graph = recreate_asset(GRAPH_PACKAGE, GRAPH_NAME, unreal.PCGGraphFactory())
 
     src_node, src_settings = graph.add_node_of_type(unreal.PCGOSMCitySettings)
-    src_settings.set_editor_property("city_data_path", CITY_DATA_PATH)
+    src_settings.set_editor_property("city_data_dir", CITY_DATA_DIR)
 
-    for index, pin in enumerate(MESH_PINS):
-        spawn_node, _ = graph.add_node_of_type(unreal.PCGSpawnDynamicMeshSettings)
-        graph.add_edge(src_node, pin, spawn_node, IN_PIN)
-        # Lay the graph out so it is readable when a reviewer opens it.
-        spawn_node.set_node_position(600, index * 220)
+    # Everything arrives on one pin, so one spawner covers every kind of geometry.
+    spawn_node, _ = graph.add_node_of_type(unreal.PCGSpawnDynamicMeshSettings)
+    graph.add_edge(src_node, MESH_PIN, spawn_node, IN_PIN)
+    # Lay the graph out so it is readable when a reviewer opens it.
+    spawn_node.set_node_position(600, 220)
 
     src_node.set_node_position(0, 220)
 

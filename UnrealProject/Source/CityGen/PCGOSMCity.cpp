@@ -14,15 +14,16 @@ DEFINE_LOG_CATEGORY_STATIC(LogPCGOSMCity, Log, All);
 TArray<FPCGPinProperties> UPCGOSMCitySettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> Properties;
-	Properties.Emplace(PCGOSMCityPins::Buildings, EPCGDataType::DynamicMesh,
-		/*bInAllowMultipleConnections=*/true, /*bAllowMultipleData=*/false,
-		LOCTEXT("BuildingsTooltip", "Extruded OSM building footprints."));
-	Properties.Emplace(PCGOSMCityPins::Roads, EPCGDataType::DynamicMesh,
-		true, false, LOCTEXT("RoadsTooltip", "Flat ribbons along the road centrelines."));
-	Properties.Emplace(PCGOSMCityPins::Ground, EPCGDataType::DynamicMesh,
-		true, false, LOCTEXT("GroundTooltip", "Ground slab covering the area bounds."));
-	Properties.Emplace(PCGOSMCityPins::RoadSplines, EPCGDataType::Spline,
-		true, true, LOCTEXT("RoadSplinesTooltip", "One spline per road centreline."));
+	// One mesh pin, not one per feature class. Each emitted mesh carries the scene node's
+	// own tags, so a class the pipeline invents later needs no new pin and no C++.
+	Properties.Emplace(PCGOSMCityPins::Meshes, EPCGDataType::DynamicMesh,
+		/*bInAllowMultipleConnections=*/true, /*bAllowMultipleData=*/true,
+		LOCTEXT("MeshesTooltip",
+			"Geometry built from the scene: extruded volumes, appended triangle meshes, "
+			"road ribbons and the ground slab. Each data is tagged with its node's tags."));
+	Properties.Emplace(PCGOSMCityPins::Splines, EPCGDataType::Spline,
+		true, true,
+		LOCTEXT("SplinesTooltip", "One spline per ribbon centreline."));
 	return Properties;
 }
 
@@ -39,9 +40,9 @@ bool FPCGOSMCityElement::ExecuteInternal(FPCGContext* Context) const
 	const UPCGOSMCitySettings* Settings = Context->GetInputSettings<UPCGOSMCitySettings>();
 	check(Settings);
 
-	FOSMCity City;
+	FOSMScene Scene;
 	FString Error;
-	if (!UOSMCityDataLibrary::LoadCityFromJsonFile(Settings->CityDataPath, City, Error))
+	if (!UOSMCityDataLibrary::LoadSceneFromDirectory(Settings->CityDataDir, Scene, Error))
 	{
 		PCGLog::LogErrorOnGraph(
 			FText::Format(LOCTEXT("LoadFailed", "OSM City Source: {0}"), FText::FromString(Error)),
@@ -49,54 +50,68 @@ bool FPCGOSMCityElement::ExecuteInternal(FPCGContext* Context) const
 		return true;
 	}
 
-	// Each mesh pin emits a single dynamic mesh; downstream Spawn Dynamic Mesh turns
-	// it into a PCG-managed component, so a regenerate replaces rather than stacks.
-	auto EmitMesh = [Context](const FName Pin) -> UPCGDynamicMeshData*
+	// Downstream Spawn Dynamic Mesh turns each of these into a PCG-managed component, so
+	// regenerating replaces rather than stacks.
+	auto EmitMesh = [Context](const TArray<FString>& Tags) -> UPCGDynamicMeshData*
 	{
 		UPCGDynamicMeshData* Data = FPCGContext::NewObject_AnyThread<UPCGDynamicMeshData>(Context);
 		FPCGTaggedData& Tagged = Context->OutputData.TaggedData.Emplace_GetRef();
 		Tagged.Data = Data;
-		Tagged.Pin = Pin;
+		Tagged.Pin = PCGOSMCityPins::Meshes;
+		for (const FString& Tag : Tags)
+		{
+			Tagged.Tags.Add(Tag);
+		}
 		return Data;
 	};
 
-	int32 BuildingCount = 0;
-	int32 RoadCount = 0;
+	int32 Extruded = 0;
+	int32 Triangles = 0;
+	int32 Ribbons = 0;
 
-	if (Settings->bOutputBuildings)
+	if (Settings->bOutputExtrudes)
 	{
-		UPCGDynamicMeshData* Data = EmitMesh(PCGOSMCityPins::Buildings);
-		BuildingCount = UOSMCityGeometry::AppendBuildings(
-			Data->GetMutableDynamicMesh(), City, Settings->BuildOptions);
+		UPCGDynamicMeshData* Data = EmitMesh({TEXT("extrude")});
+		Extruded = UOSMCityGeometry::AppendExtrudes(
+			Data->GetMutableDynamicMesh(), Scene, Settings->BuildOptions);
 	}
 
-	if (Settings->bOutputRoads)
+	if (Settings->bOutputMeshes && Scene.Meshes.Num() > 0)
 	{
-		UPCGDynamicMeshData* Data = EmitMesh(PCGOSMCityPins::Roads);
-		RoadCount = UOSMCityGeometry::AppendRoads(
-			Data->GetMutableDynamicMesh(), City, Settings->BuildOptions);
+		UPCGDynamicMeshData* Data = EmitMesh({TEXT("mesh")});
+		Triangles = UOSMCityGeometry::AppendMeshes(
+			Data->GetMutableDynamicMesh(), Scene, Settings->BuildOptions);
+	}
+
+	if (Settings->bOutputRibbons)
+	{
+		UPCGDynamicMeshData* Data = EmitMesh({TEXT("ribbon")});
+		Ribbons = UOSMCityGeometry::AppendRibbons(
+			Data->GetMutableDynamicMesh(), Scene, Settings->BuildOptions);
 	}
 
 	if (Settings->bOutputGround)
 	{
-		UPCGDynamicMeshData* Data = EmitMesh(PCGOSMCityPins::Ground);
+		UPCGDynamicMeshData* Data = EmitMesh({TEXT("ground")});
 		UOSMCityGeometry::AppendGround(
-			Data->GetMutableDynamicMesh(), City, Settings->BuildOptions);
+			Data->GetMutableDynamicMesh(), Scene, Settings->BuildOptions);
 	}
 
-	if (Settings->bOutputRoadSplines)
+	if (Settings->bOutputSplines)
 	{
-		const float Z = Settings->BuildOptions.RoadZOffsetCm;
-		for (const FOSMRoad& Road : City.Roads)
+		for (const FOSMRibbon& Ribbon : Scene.Ribbons)
 		{
+			const float Z = Settings->BuildOptions.RibbonZOffsetCm
+				+ Ribbon.Layer * Settings->BuildOptions.LayerSpacingCm;
+
 			TArray<FSplinePoint> SplinePoints;
-			SplinePoints.Reserve(Road.PointsCm.Num());
-			for (int32 i = 0; i < Road.PointsCm.Num(); ++i)
+			SplinePoints.Reserve(Ribbon.Points.Num());
+			for (int32 i = 0; i < Ribbon.Points.Num(); ++i)
 			{
-				// Linear points: OSM centrelines are already polylines, curving them
-				// would move the road off the surveyed geometry.
+				// Linear points: the centrelines are already polylines, and curving them
+				// would move the geometry off the surveyed shape.
 				SplinePoints.Emplace(static_cast<float>(i),
-					FVector(Road.PointsCm[i].X, Road.PointsCm[i].Y, Z + Road.Layer * 400.f),
+					FVector(Ribbon.Points[i].X, Ribbon.Points[i].Y, Z),
 					ESplinePointType::Linear);
 			}
 
@@ -105,16 +120,18 @@ bool FPCGOSMCityElement::ExecuteInternal(FPCGContext* Context) const
 
 			FPCGTaggedData& Tagged = Context->OutputData.TaggedData.Emplace_GetRef();
 			Tagged.Data = SplineData;
-			Tagged.Pin = PCGOSMCityPins::RoadSplines;
-			// Tags let downstream nodes filter by road class, e.g. wider primaries.
-			Tagged.Tags.Add(Road.RoadClass);
+			Tagged.Pin = PCGOSMCityPins::Splines;
+			for (const FString& Tag : Ribbon.Tags)
+			{
+				Tagged.Tags.Add(Tag);
+			}
 		}
 	}
 
 	UE_LOG(LogPCGOSMCity, Log,
-		TEXT("OSM City Source: area '%s' -> %d buildings, %d road ribbons, %d splines"),
-		*City.AreaName, BuildingCount, RoadCount,
-		Settings->bOutputRoadSplines ? City.Roads.Num() : 0);
+		TEXT("OSM City Source: area '%s' -> %d extruded, %d triangles, %d ribbons, %d splines"),
+		*Scene.AreaName, Extruded, Triangles, Ribbons,
+		Settings->bOutputSplines ? Scene.Ribbons.Num() : 0);
 
 	return true;
 }

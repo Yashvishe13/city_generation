@@ -5,6 +5,8 @@
 #include "GeometryScript/MeshPrimitiveFunctions.h"
 #include "UDynamicMesh.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogOSMGeometry, Log, All);
+
 namespace
 {
 	FGeometryScriptPrimitiveOptions DefaultPrimitiveOptions()
@@ -42,7 +44,7 @@ namespace
 	}
 }
 
-int32 UOSMCityGeometry::AppendBuildings(UDynamicMesh* TargetMesh, const FOSMCity& City,
+int32 UOSMCityGeometry::AppendExtrudes(UDynamicMesh* TargetMesh, const FOSMScene& Scene,
 	const FOSMBuildOptions& Options)
 {
 	if (!TargetMesh)
@@ -52,25 +54,24 @@ int32 UOSMCityGeometry::AppendBuildings(UDynamicMesh* TargetMesh, const FOSMCity
 	const FGeometryScriptPrimitiveOptions PrimitiveOptions = DefaultPrimitiveOptions();
 	int32 Built = 0;
 
-	for (const FOSMBuilding& B : City.Buildings)
+	for (const FOSMExtrude& Node : Scene.Extrudes)
 	{
-		if (B.OutlineCm.Num() < 3)
+		if (Node.Outline.Num() < 3)
 		{
 			continue;
 		}
-		if (Options.MinFootprintAreaCm2 > 0.f &&
-			B.BoxLengthCm * B.BoxWidthCm < Options.MinFootprintAreaCm2)
+		if (Options.MinFootprintAreaCm2 > 0.f && Node.AreaCm2 < Options.MinFootprintAreaCm2)
 		{
 			continue;
 		}
 
-		// Extrude in the footprint's own frame: vertices relative to the centroid,
-		// transform carries the world placement. Keeps the maths in small numbers.
+		// Sweep in the ring's own frame: vertices relative to the centroid, transform
+		// carries the world placement. Keeps the maths in small numbers.
 		TArray<FVector2D> Local;
-		Local.Reserve(B.OutlineCm.Num());
-		for (const FVector2D& P : B.OutlineCm)
+		Local.Reserve(Node.Outline.Num());
+		for (const FVector2D& P : Node.Outline)
 		{
-			Local.Add(P - B.CentroidCm);
+			Local.Add(P - Node.CentroidCm);
 		}
 		// AppendSimpleExtrudePolygon needs CCW input or the solid comes out inside-out.
 		if (SignedArea(Local) < 0.0)
@@ -80,11 +81,13 @@ int32 UOSMCityGeometry::AppendBuildings(UDynamicMesh* TargetMesh, const FOSMCity
 
 		const FTransform Placement(
 			FRotator::ZeroRotator,
-			FVector(B.CentroidCm.X, B.CentroidCm.Y, B.BaseCm));
+			FVector(Node.CentroidCm.X, Node.CentroidCm.Y, Node.BaseCm));
 
+		// HeightCm is the absolute top and BaseCm the absolute bottom, both decided by
+		// the pipeline; this only sweeps the difference.
 		UGeometryScriptLibrary_MeshPrimitiveFunctions::AppendSimpleExtrudePolygon(
 			TargetMesh, PrimitiveOptions, Placement, Local,
-			FMath::Max(50.f, B.HeightCm + Options.HeightBiasCm),
+			FMath::Max(50.f, Node.HeightCm - Node.BaseCm + Options.HeightBiasCm),
 			/*HeightSteps=*/0, /*bCapped=*/true,
 			EGeometryScriptPrimitiveOriginMode::Base);
 		++Built;
@@ -95,7 +98,42 @@ int32 UOSMCityGeometry::AppendBuildings(UDynamicMesh* TargetMesh, const FOSMCity
 	return Built;
 }
 
-int32 UOSMCityGeometry::AppendRoads(UDynamicMesh* TargetMesh, const FOSMCity& City,
+int32 UOSMCityGeometry::AppendMeshes(UDynamicMesh* TargetMesh, const FOSMScene& Scene,
+	const FOSMBuildOptions& Options)
+{
+	if (!TargetMesh)
+	{
+		return 0;
+	}
+	const FGeometryScriptPrimitiveOptions PrimitiveOptions = DefaultPrimitiveOptions();
+	int32 Triangles = 0;
+
+	// Vertices are absolute world centimetres, so they append with an identity transform:
+	// whatever the pipeline computed is exactly what gets built.
+	for (const FOSMMesh& Node : Scene.Meshes)
+	{
+		for (int32 i = 0; i + 2 < Node.Indices.Num(); i += 3)
+		{
+			const TArray<FVector> Triangle = {
+				Node.Vertices[Node.Indices[i]],
+				Node.Vertices[Node.Indices[i + 1]],
+				Node.Vertices[Node.Indices[i + 2]],
+			};
+			UGeometryScriptLibrary_MeshPrimitiveFunctions::AppendTriangulatedPolygon3D(
+				TargetMesh, PrimitiveOptions, FTransform::Identity, Triangle);
+			++Triangles;
+		}
+	}
+
+	if (Triangles > 0)
+	{
+		UGeometryScriptLibrary_MeshNormalsFunctions::RecomputeNormals(
+			TargetMesh, FGeometryScriptCalculateNormalsOptions());
+	}
+	return Triangles;
+}
+
+int32 UOSMCityGeometry::AppendRibbons(UDynamicMesh* TargetMesh, const FOSMScene& Scene,
 	const FOSMBuildOptions& Options)
 {
 	if (!TargetMesh)
@@ -105,16 +143,17 @@ int32 UOSMCityGeometry::AppendRoads(UDynamicMesh* TargetMesh, const FOSMCity& Ci
 	const FGeometryScriptPrimitiveOptions PrimitiveOptions = DefaultPrimitiveOptions();
 	int32 Built = 0;
 
-	for (const FOSMRoad& R : City.Roads)
+	for (const FOSMRibbon& Node : Scene.Ribbons)
 	{
-		const float HalfWidth = FMath::Max(100.f, R.WidthCm * 0.5f);
-		// Bridges/tunnels get separated vertically so they do not fight the surface.
-		const float Z = Options.RoadZOffsetCm + R.Layer * 400.f;
+		const float HalfWidth = FMath::Max(50.f, Node.WidthCm * 0.5f);
+		// Layer separates stacked strips; a tunnel drawn at street level would pave over
+		// the road above it.
+		const float Z = Options.RibbonZOffsetCm + Node.Layer * Options.LayerSpacingCm;
 
-		for (int32 i = 0; i + 1 < R.PointsCm.Num(); ++i)
+		for (int32 i = 0; i + 1 < Node.Points.Num(); ++i)
 		{
-			const FVector2D A = R.PointsCm[i];
-			const FVector2D B = R.PointsCm[i + 1];
+			const FVector2D A = Node.Points[i];
+			const FVector2D B = Node.Points[i + 1];
 			const FVector2D Delta = B - A;
 			const float Length = Delta.Size();
 			if (Length < 1.f)
@@ -130,12 +169,12 @@ int32 UOSMCityGeometry::AppendRoads(UDynamicMesh* TargetMesh, const FOSMCity& Ci
 		}
 
 		// Square patch at each interior vertex, so corners have no wedge-shaped gap.
-		for (int32 i = 1; i + 1 < R.PointsCm.Num(); ++i)
+		for (int32 i = 1; i + 1 < Node.Points.Num(); ++i)
 		{
 			AppendQuad(TargetMesh, PrimitiveOptions,
 				FVector2D(HalfWidth, HalfWidth),
 				FTransform(FRotator::ZeroRotator,
-					FVector(R.PointsCm[i].X, R.PointsCm[i].Y, Z)));
+					FVector(Node.Points[i].X, Node.Points[i].Y, Z)));
 		}
 		++Built;
 	}
@@ -143,16 +182,16 @@ int32 UOSMCityGeometry::AppendRoads(UDynamicMesh* TargetMesh, const FOSMCity& Ci
 	return Built;
 }
 
-bool UOSMCityGeometry::AppendGround(UDynamicMesh* TargetMesh, const FOSMCity& City,
+bool UOSMCityGeometry::AppendGround(UDynamicMesh* TargetMesh, const FOSMScene& Scene,
 	const FOSMBuildOptions& Options)
 {
-	if (!TargetMesh || !City.BoundsCm.bIsValid)
+	if (!TargetMesh || !Scene.BoundsCm.bIsValid)
 	{
 		return false;
 	}
 	const FVector2D Padding(Options.GroundPaddingCm * 2.f, Options.GroundPaddingCm * 2.f);
-	const FVector2D Size = City.BoundsCm.GetSize() + Padding;
-	const FVector2D Centre = City.BoundsCm.GetCenter();
+	const FVector2D Size = Scene.BoundsCm.GetSize() + Padding;
+	const FVector2D Centre = Scene.BoundsCm.GetCenter();
 
 	UGeometryScriptLibrary_MeshPrimitiveFunctions::AppendBox(
 		TargetMesh, DefaultPrimitiveOptions(),

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hermes backend as a launchd service, scoped to the `citygen` profile.
+
+  Runs `hermes serve --isolated`, the headless JSON-RPC/WebSocket backend, so the
+  agent is reachable without an interactive CLI session. `--isolated` keeps it bound
+  to the citygen profile (grok-4.6 + the osm plugin) instead of attaching to a
+  machine-level server that would also expose the default profile.
+
+  Manage with:
+    launchctl kickstart -k gui/$UID/ai.hermes.serve-citygen   # (re)start
+    launchctl print gui/$UID/ai.hermes.serve-citygen          # status
+    launchctl bootout gui/$UID/ai.hermes.serve-citygen        # stop + unregister
+
+  THIS FILE IS A TEMPLATE, NOT A PORTABLE ARTIFACT. launchd does no variable
+  expansion, so every path below is written out in full and must be edited before
+  installing on another machine. Seven of them, all under this project's checkout or
+  the invoking user's home:
+
+    ProgramArguments[0]   <repo>/hermes-agent/.venv/bin/hermes
+    WorkingDirectory      <repo>/hermes-agent
+    EnvironmentVariables
+      PATH                <repo>/hermes-agent/.venv/bin:...   (plus the local brew/bin)
+      HOME                <the user's home>
+      CITYGEN_OSM_OUT_DIR <repo>/data/raw
+    StandardOutPath       <home>/Library/Logs/hermes-citygen-serve.out.log
+    StandardErrorPath     <home>/Library/Logs/hermes-citygen-serve.err.log
+
+  Nothing else in the project hardcodes a path; do not copy this file's style anywhere
+  that a path can be derived instead.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ai.hermes.serve-citygen</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/yav13/Work/city_generation/hermes-agent/.venv/bin/hermes</string>
+		<string>-p</string>
+		<string>citygen</string>
+		<string>serve</string>
+		<string>--isolated</string>
+		<string>--host</string>
+		<string>127.0.0.1</string>
+		<string>--port</string>
+		<string>9119</string>
+		<!-- The UI is pre-built into web/dist; never shell out to npm from a service. -->
+		<string>--skip-build</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/Users/yav13/Work/city_generation/hermes-agent</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- launchd starts with a minimal PATH; node/npm and homebrew tools are not on it. -->
+		<key>PATH</key>
+		<string>/Users/yav13/Work/city_generation/hermes-agent/.venv/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<key>HOME</key>
+		<string>/Users/yav13</string>
+		<!-- Where the osm tools write fetched OSM data. -->
+		<key>CITYGEN_OSM_OUT_DIR</key>
+		<string>/Users/yav13/Work/city_generation/data/raw</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+		<key>Crashed</key>
+		<true/>
+	</dict>
+	<!-- Do not hammer the API if it fails at startup. -->
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+
+	<key>StandardOutPath</key>
+	<string>/Users/yav13/Library/Logs/hermes-citygen-serve.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/yav13/Library/Logs/hermes-citygen-serve.err.log</string>
+
+	<key>ProcessType</key>
+	<string>Interactive</string>
+</dict>
+</plist>

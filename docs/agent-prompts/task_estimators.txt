@@ -1,0 +1,37 @@
+Build an area-general estimator layer for this pipeline. New file scripts/estimators.py,
+Python 3 standard library only. Do NOT modify scripts/convert_to_ue.py yet - integration
+is a later step. Do not modify any other file.
+
+WHY: our Midtown extract states 97% of building heights but ZERO road widths. Other areas
+invert this (paris_marais has ~0% height tags; boston_financial states width on 73% of
+road length). The estimator must work from whatever the area actually has, never from
+constants tuned to one city.
+
+Provide two estimators, each fitted from an area's own data:
+
+1. BUILDING HEIGHT, for footprints with no height and no building:levels.
+   Signals worth trying: the area's tagged heights grouped by building type; by footprint
+   area; by spatial neighbourhood (blocks are homogeneous); sibling building:part volumes
+   on the same parent. Use what the area supports, degrade gracefully when it supports
+   nothing (say what you fall back to).
+
+2. ROAD WIDTH, for ways with no width tag.
+   Signals: `lanes` x a lane width you FIT rather than assume; per-class defaults FIT from
+   areas that do state widths; and - this one is the interesting one - measure the
+   facade-to-facade gap by probing perpendicular from the centreline to the nearest
+   building footprint on each side, then subtract a sidewalk allowance. Midtown is a
+   canyon grid so that probe should be well conditioned; check whether it is.
+   Support calibrating on one area and applying to another, since Midtown has no width
+   tags to learn from and Boston has plenty.
+
+VALIDATION IS THE POINT. Include a mode that hides known values, predicts them, and
+reports median and mean absolute error, plus the error of a trivial baseline (global
+median) so we can see whether the estimator is worth anything. An estimator that does not
+beat its baseline should be reported as such, not quietly shipped.
+
+Run the validation across at least nyc_midtown (heights), paris_marais (heights, an area
+with almost no height tags), and boston_financial (widths, the only area with real width
+data), and report the numbers. Deterministic: no RNG, or seed it.
+
+Then tell me: which estimator is actually trustworthy, which is not, and what the honest
+error bars are for each area.

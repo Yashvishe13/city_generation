@@ -1,12 +1,12 @@
 // PCG source node: reads the translated OSM export and emits it as PCG data.
 //
-//   Buildings   (Dynamic Mesh)  extruded footprints
-//   Roads       (Dynamic Mesh)  centreline ribbons
-//   Ground      (Dynamic Mesh)  ground slab
-//   RoadSplines (Spline)        one spline per centreline, for spline-mesh roads
+//   Meshes  (Dynamic Mesh)  everything built from the scene, each data tagged with the
+//                           node tags it came from
+//   Splines (Spline)        one spline per ribbon centreline
 //
-// Wire the mesh pins into Spawn Dynamic Mesh nodes; PCG owns the resulting
-// components, so regenerating never leaves stale geometry behind.
+// Wire Meshes into a Spawn Dynamic Mesh node; PCG owns the resulting components, so
+// regenerating never leaves stale geometry behind. A feature class the pipeline invents
+// later arrives on the same pin with different tags - no new pin, no C++.
 #pragma once
 
 #include "PCGSettings.h"
@@ -17,10 +17,9 @@
 
 namespace PCGOSMCityPins
 {
-	const FName Buildings = TEXT("Buildings");
-	const FName Roads = TEXT("Roads");
-	const FName Ground = TEXT("Ground");
-	const FName RoadSplines = TEXT("RoadSplines");
+	// One mesh pin for every kind of geometry; the data carries tags instead.
+	const FName Meshes = TEXT("Meshes");
+	const FName Splines = TEXT("Splines");
 }
 
 UCLASS(BlueprintType, ClassGroup = (Procedural))
@@ -39,8 +38,8 @@ public:
 	virtual FText GetNodeTooltipText() const override
 	{
 		return NSLOCTEXT("PCGOSMCity", "NodeTooltip",
-			"Loads a city.json produced by the osm2pcg pipeline and outputs building, "
-			"road and ground geometry plus road splines.");
+			"Loads the scene.json produced by the generated pipeline for an area and "
+			"outputs its geometry as dynamic meshes plus centreline splines.");
 	}
 	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
 #endif
@@ -52,24 +51,27 @@ protected:
 	//~End UPCGSettings interface
 
 public:
-	/** city.json path; relative paths resolve against the project Content dir. */
+	/** Directory of converter output; relative paths resolve against Content. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
-	FString CityDataPath = TEXT("Data/city.json");
+	FString CityDataDir = TEXT("Data/City");
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FOSMBuildOptions BuildOptions;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
-	bool bOutputBuildings = true;
+	bool bOutputExtrudes = true;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
-	bool bOutputRoads = true;
+	bool bOutputMeshes = true;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
+	bool bOutputRibbons = true;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	bool bOutputGround = true;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
-	bool bOutputRoadSplines = true;
+	bool bOutputSplines = true;
 };
 
 class FPCGOSMCityElement : public IPCGElement

@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Convenience presets only - any bbox works. Each is a few blocks to a small",
+    "district, the scope this project targets. bbox is [south, west, north, east]",
+    "in WGS84 degrees.",
+    "",
+    "Chosen by measurement, not taste: 23 candidate areas were scored on how much of",
+    "the footprint area has a stated height rather than a guessed one (see",
+    "docs/area_survey.md and docs/area_survey.json). The first three below were the",
+    "finalists; the last two are kept as deliberately weaker contrasts for testing a",
+    "pipeline against sparse tagging."
+  ],
+
+  "nyc_midtown": {
+    "bbox": [40.7500, -73.9860, 40.7555, -73.9790],
+    "note": "Midtown Manhattan, NYC, USA - richest height data, 5.7-397 m range, municipal footprint import. 266 tagged buildings plus 521 of 524 building:part polygons state their own height; residual guesswork ~1% of footprint area. No road in the area carries a width tag."
+  },
+  "vienna_innere": {
+    "bbox": [48.2060, 16.3660, 48.2115, 16.3750],
+    "note": "Vienna Innere Stadt, Austria - 94% explicit heights, the best-tagged of the survey, but almost no vertical variety (median 28 m, max 37 m). Irregular historic footprints. Essentially no road states width or lanes."
+  },
+  "boston_financial": {
+    "bbox": [42.3540, -71.0600, 42.3595, -71.0530],
+    "note": "Boston Financial District, USA - lowest unknown count (6.1%) but 55% of buildings give only building:levels. Towers to 210 m. Best road data of the set: width stated on 73% of driveable length. Big Dig tunnels are present and carry layer."
+  },
+  "chicago_loop": {
+    "bbox": [41.8775, -87.6365, 41.8830, -87.6285],
+    "note": "Chicago Loop, IL, USA - regular street grid, weak height tagging (16.9% explicit, 41% of buildings say nothing). Useful for exercising an estimator rather than a tag reader."
+  },
+  "paris_marais": {
+    "bbox": [48.8560, 2.3560, 48.8610, 2.3650],
+    "note": "Le Marais, Paris, France - essentially no height tag at all (1 building in 694); floor counts only, 52% state building:levels. Courtyard buildings with interior rings. The area that should make an estimator refuse rather than fit."
+  }
+}

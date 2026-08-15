@@ -15,8 +15,25 @@ __pycache__/
 *.egg-info/
 *.pyc
 
-# --- Data: keep translated exports, drop the bulky raw Overpass cache
-data/raw/osm_*.json
+# --- Data
+# The raw Overpass extract is a cache, not a source: any pipeline re-fetches it on a
+# clean checkout, and the fetch is date-pinned so a re-run returns the same bytes.
+# Translated exports (data/ue/) and the area presets ARE tracked.
+data/raw/
+
+# --- Agent framework
+# hermes-agent/ IS tracked: it is how a pipeline gets generated and it carries this
+# project's plugins/osm (the skills + the scene verifier). Only its machine-local parts
+# are excluded - a virtualenv is 117 MB of platform binaries with absolute paths baked
+# into its scripts, which is exactly what this project refuses to ship elsewhere.
+hermes-agent/.venv/
+hermes-agent/log.txt
+hermes-agent/**/.pytest_cache/
+hermes-agent/**/node_modules/
+hermes-agent/**/*.log
 
 # --- OS
 .DS_Store
+
+# --- secrets
+.env

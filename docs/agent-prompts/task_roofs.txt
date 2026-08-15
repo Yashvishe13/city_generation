@@ -1,0 +1,31 @@
+Extend scripts/convert_to_ue.py to generate ROOF GEOMETRY in the translator. Do not modify
+any other file. Keep everything already working (buildings, roads, determinism, --verify).
+
+WHY: roof form is currently thrown away, though this extract tags roof:shape on 545
+features. It must be computed here, not in Unreal: the UE side is a dumb consumer that
+extrudes a polygon and appends triangles, and knows nothing about OSM.
+
+Add two fields per emitted building volume:
+  wall_height_cm    absolute Z the walls extrude to (roof sits on top of this)
+  roof_triangles    list of triangles, each [[x,y,z],[x,y,z],[x,y,z]] in the SAME UE
+                    centimetre frame as `outline` (absolute world coordinates, +X North,
+                    +Y East, +Z Up), wound counter-clockwise seen from OUTSIDE so normals
+                    face outward. Empty list = flat roof, nothing to add.
+`height_cm` keeps its current meaning: the absolute top of the volume including its roof.
+
+Drive it from whatever the data states: roof:shape, roof:height, roof:levels, roof:angle,
+roof:direction, roof:orientation. Remember roof:height is contained in height. When a
+shape is stated but no roof height is, derive one and justify it from THIS AREA's data -
+no constant tuned to a particular city (the file currently has NYC-specific values like
+LANE_M = 3.25 "NYC DOT" and "Park Ave / 42nd St" class widths; do not add more of that
+kind, and if a roof rule needs a number, fit it or state it as an explicit assumption).
+
+Cover the shapes the data actually contains; anything you do not model must fall back to
+flat and be COUNTED, not silently dropped. Ridge direction should come from the tags when
+stated and otherwise from the footprint's own geometry.
+
+Add the shape breakdown and the fallback counts to manifest.json, then run it on
+nyc_midtown AND on at least one area with different roof tagging (the data/raw directory
+has several fetched areas - pick one and say why). Report: shapes handled, how many
+degraded to flat and why, total triangles emitted, and whether output is still
+deterministic.
