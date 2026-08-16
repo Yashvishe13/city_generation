@@ -37,3 +37,4 @@ hermes-agent/**/*.log
 
 # --- secrets
 .env
+.claude

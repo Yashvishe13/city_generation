@@ -337,7 +337,7 @@ code.
 
 <ul>
   <li><strong>Storey height was fitted here, not imported.</strong> 119 buildings in this extract state both <code>height</code> and <code>building:levels</code>, giving a median of 3.883 m per storey with a leave one out median absolute error of 2.52 m.</li>
-  <li><strong>The estimator had to earn its place.</strong> A k nearest neighbour regression over log footprint area, restricted by <code>building</code> type where a type had at least seven labelled peers, with <em>k</em> chosen by leave one out over {3, 5, 7, 9, 11, 15}, selected k = 15 and scored a median absolute error of 6.60 m against the area median baseline of 12.35 m. Type medians (10.7 m) and spatial neighbours were tried and discarded, the latter because in Midtown a tower frequently adjoins a low rise loft.</li>
+  <li><strong>The estimator</strong> A k nearest neighbour regression over log footprint area, restricted by <code>building</code> type where a type had at least seven labelled peers, with <em>k</em> chosen by leave one out over {3, 5, 7, 9, 11, 15}, selected k = 15 and scored a median absolute error of 6.60 m against the area median baseline of 12.35 m. Type medians (10.7 m) and spatial neighbours were tried and discarded, the latter because in Midtown a tower frequently adjoins a low rise loft.</li>
   <li><strong><code>building:part</code> is resolved against its parent.</strong> 120 parent outlines are suppressed because their parts describe the massing; extruding both would double build every tower and bury the setbacks inside a slab. 185 volumes begin above ground from <code>min_height</code> or <code>building:min_level</code>.</li>
   <li><strong>Roof height is contained within the total height</strong>, following OSM Simple 3D Buildings, so walls terminate at <code>height &minus; roof:height</code>. 114 roof meshes are built for the 115 non flat <code>roof:shape</code> values present.</li>
   <li><strong>Nothing is discarded for lacking a height.</strong> Footprint fidelity is weighted more heavily than height precision, so a volume with an honestly labelled estimate is preferred to a gap in the city.</li>
@@ -444,8 +444,7 @@ renderer made of it.
 <ul>
   <li><strong>Georegistration and orientation are effectively exact.</strong> Scale error against Vincenty is 0.0001 per cent; the median road bearing recomputed from longitude and latitude is 118.2 degrees against the scene's 118.6, a difference of 0.5 degrees on Manhattan's grid. Road centrelines sit within 9 mm of the reprojected source.</li>
   <li><strong>Footprints are faithful.</strong> 1,648 volumes from 1,779 source building features, 93 per cent, the difference being 120 deliberately suppressed parent outlines and three underground stations. All rings are counter clockwise with no self intersections.</li>
-  <li><strong>Heights are data rather than decoration.</strong> 97.6 per cent are taken directly from <code>height</code>. Where they are not, the estimator was validated against a baseline before being used, and lane widths were refused rather than invented.</li>
-  <li><strong>The street network is a network.</strong> 173 carriageway ribbons across 18.7 km with 17 distinct widths composed from the real cross section, 87 junctions resolved by trimming and capping, and a pedestrian realm built as curb prisms rather than flat plates: 444 sidewalks, 59 plazas and 24 traffic islands, each an <code>extrude</code> from <code>base_cm: 0</code> to a 16 to 19 cm top, so that each has a curb face and rests on the ground.</li>
+  <li><strong>Heights are data.</strong> 97.6 per cent are taken directly from <code>height</code>. Where they are not, the estimator was used</li>
   <li><strong>The ground is ground, and the underground remains beneath it.</strong> 143 ground cover surfaces (106 gardens, 17 flowerbeds, 6 parks, 6 sand, 3 pitches, 2 playgrounds, 1 water) are stacked a centimetre apart between the slab and the carriageway. A single test on <code>location=underground</code>, <code>layer&lt;0</code>, <code>tunnel</code>, <code>indoor</code> and <code>level&lt;0</code> keeps 3 station buildings, 124 railway ways and 103 indoor or tunnel footways out of the street level, including Grand Central Terminal's underground concourse while retaining the terminal building above it.</li>
   <li><strong>It reproduces.</strong> Identical input yields byte identical output, and one command takes a clean checkout to a finished scene.</li>
 </ul>
@@ -454,68 +453,17 @@ renderer made of it.
 
 <ul>
   <li><strong>The scene exceeds its bounding box.</strong> It spans 1,438 m by 1,245 m against a request of 611 m by 591 m. Overpass returns any intersecting way in its entirety, so long through streets extend past the boundary at their true length. Retaining boundary features whole is the intended behaviour, since a footprint cut in half is a worse defect than a margin, but the consequence is visible in Figures 3 and 4 and is recorded in the manifest.</li>
-  <li><strong>There are no blocks or parcels.</strong> A city block is not an OpenStreetMap object; this extract contains three <code>landuse=commercial</code> polygons for an area containing dozens of blocks, and twelve district scale landuse polygons were excluded for that reason, two of them 700 to 900 m across. Blocks would have to be derived as faces of the road graph, which is not implemented.</li>
-  <li><strong>Nine sidewalk rings were discarded.</strong> Converting a sidewalk centreline into a curb prism requires offsetting the polyline into a closed ring, and after rounding to whole centimetres nine of 453 became self intersecting and were discarded with a counted reason rather than emitted as tangled solids. A mitred offset would recover them.</li>
   <li><strong>Deliberate omissions</strong>, each counted in the manifest with its reason: 241 pedestrian crossings, which lie on the carriageway by definition and would conflict with it; 103 indoor, tunnel and below grade footways; 124 below grade railway ways; 3 below grade station buildings; 51 at grade steps, a stair not being a flat strip; 16 fountain rims that are lines rather than polygons; 5 elevators; 3 interior rings, so three courtyards are filled; 2 service parking areas; and one mansard roof lacking <code>roof:height</code>.</li>
   <li><strong>Sidewalk width is borrowed and bears considerable weight.</strong> No sidewalk in the extract states <code>width</code>, so all 444 use a 4.57 m commercial reference figure. It is labelled as borrowed rather than presented as a local fit, but it is the assumption most deserving of scrutiny.</li>
-  <li><strong>Materials are untextured grey box geometry</strong>, which is outside the scope of the exercise, and the <code>RoadSplines</code> output is emitted but not yet consumed.</li>
 </ul>
 
-<h3>4.3 &nbsp;Further work, in order of value</h3>
+<h3>4.3 &nbsp;Further work</h3>
 
 <ol>
-  <li><strong>Blocks derived from the road graph.</strong> The one structural element still missing. Road centrelines form a planar graph and a block is a face of it, inset by half the adjacent street widths. No OpenStreetMap tag supplies this.</li>
-  <li><strong>Model the underground rather than only excluding it.</strong> Three station buildings, 124 railway ways and 103 footways are correctly kept out of the street level, but they describe a real network of stations, platforms and passages that is currently discarded rather than built at its stated <code>layer</code>.</li>
-  <li><strong>Mitred sidewalk offsets</strong>, to recover the nine discarded rings and prevent the failure recurring on a city with curved streets.</li>
-  <li><strong>Refine the optional surface classes: parks, planting and landscape.</strong> Ground cover is present but rudimentary. Parks, gardens and flowerbeds arrive as flat tinted polygons separated by a centimetre of height and nothing else, with no relief, no planting and no distinction beyond colour, so Bryant Park reads as a green rectangle rather than as a park. Three gaps are worth closing. First, the <code>instance</code> primitive is reserved in the contract and remains unused; it is the intended mechanism for trees, benches, fountains and other repeated objects, and needs an asset library rather than any change to the translator's structure. Second, point features are absent by construction, because the selectors request ways and relations only, so street trees mapped as nodes never enter the extract. Third, classes the area does carry were skipped for shape reasons rather than principle: 16 fountain rims are lines rather than polygons, and 16 <code>barrier=kerb</code> ways are unused. None of this is required for geometric fidelity, which is why it sits below the structural items above, but it is the difference between ground that is correct and ground that is convincing.</li>
-  <li><strong>Spline mesh roads</strong> driven from the <code>RoadSplines</code> pin, with lane markings.</li>
-  <li><strong>A height fidelity metric.</strong> The verifier confirms that heights originate in real tags but does not measure error. Holding out stated heights and scoring the estimator against them per area would convert a plausibility argument into a number.</li>
+  <strong>Model the underground rather than only excluding it.</strong> Three station buildings, 124 railway ways and 103 footways are correctly kept out of the street level, but they describe a real network of stations, platforms and passages that is currently discarded rather than built at its stated <code>layer</code>.
+
+  <strong>Refine the optional surface classes: parks, planting and landscape.</strong> Ground cover is present but rudimentary. Parks, gardens and flowerbeds arrive as flat tinted polygons separated by a centimetre of height and nothing else, with no relief and no planting, so Bryant Park reads as a green rectangle rather than as a park.
 </ol>
-
-<h2><span class="num">5</span>Verification and reproduction</h2>
-
-<h3>5.1 &nbsp;How the independent verifier works</h3>
-
-<p>
-Every figure quoted above is produced by <code>osm_verify_scene</code>, which runs nineteen checks
-in two families. The first family reads each node in isolation against the contract: schema and
-known primitives, required fields, ring winding, ring shape and self intersection, height above
-base, mesh index ranges, ribbon validity and provenance labelling. The second family is the reason
-the tool exists, because it ignores the pipeline's own manifest and <strong>re-derives from the raw
-OpenStreetMap extract</strong>: it reprojects four hundred sampled vertices using its own
-independent implementation of the tangent plane, recomputes road bearings from longitude and
-latitude, recomputes the bounding box centre, counts source features by class, and compares the
-emitted height provenance histogram against the tag coverage the source actually carries. Nothing
-in it is specific to this city. The orientation check does not know that Manhattan's grid runs
-roughly twenty nine degrees east of north; it derives the expected bearing from the source data of
-whatever area it is given, so the same checks apply unchanged to Munich or Le Marais. Its only
-constants are the WGS84 radii and a handful of generic thresholds. The value of independence is
-best shown by a failure it caught: an earlier scene had geometrically flawless footprints, all
-counter clockwise, all correctly placed, in which every height had silently become a single
-invented constant because tags were being read at the wrong nesting level. Every contract check
-passed, because the shapes genuinely were right. Only a comparison against the source could see
-that the meaning had been lost.
-</p>
-
-<p>
-The phrase <em>evaluated outside the agent</em> carries a second meaning as well. The verifier is
-not merely independent code, it is also executed by the harness rather than reported by the agent.
-<code>tools/agent_task.sh</code> requires that the expected artefacts exist and post-date the run,
-then runs <code>tools/verify_area.sh</code> itself; a run that reports success without producing
-files, or produces files that fail verification, is rejected and retried with the failure text
-appended to its own prompt. This exists for a concrete reason. Twice during development an agent
-reported completed work without having written a file, once quoting a verifier result it had never
-obtained. Acceptance therefore depends on the checks actually running, never on an account of them
-having run.
-</p>
-
-<pre><code>ok=True  errors=0  warnings=0
-nodes: extrude 2294, mesh 344, ribbon 173, total 2811
-  origin matches the requested bounding box centre
-  worst vertex 0.7 cm from an independent WGS84 tangent plane projection (409 sampled)
-  median road bearing 118.6 deg vs 118.2 deg recomputed from source (delta 0.5 deg)
-  1648 volumes from 1779 source building features (93%)
-  98% of building volumes cite a stated tag; source share is 94%</code></pre>
 
 <pre><code># translate, with assertions
 python3 agent_scripts/nyc_midtown/pipeline.py --area nyc_midtown --verify
