@@ -63,6 +63,11 @@ def main() -> int:
     ap.add_argument("--repo", default=None)
     ap.add_argument("--camera-m", type=float, default=1200.0,
                     help="camera height used for the capture, metres")
+    ap.add_argument("--extent-m", type=float, default=None,
+                    help="width of the crop in metres. Defaults to the requested bbox; "
+                         "pass a larger value for a wide view of the whole extract")
+    ap.add_argument("--suffix", default="",
+                    help="appended to the output names, e.g. _wide")
     args = ap.parse_args()
 
     repo = Path(args.repo or os.environ.get("CITYGEN_REPO")
@@ -80,6 +85,16 @@ def main() -> int:
     img = Image.open(shot)
     px_per_m = img.width / (2.0 * args.camera_m)
     cx, cy = img.width / 2.0, img.height / 2.0
+
+    # A wider crop trades the bbox framing for showing the whole extract. The capture only
+    # holds 2 * camera_m of ground, so anything past that is outside the frame entirely.
+    if args.extent_m:
+        half_ns = half_ew = args.extent_m / 2.0
+        if args.extent_m > 2.0 * args.camera_m:
+            print(f"--extent-m {args.extent_m:.0f} exceeds the {2*args.camera_m:.0f} m the "
+                  f"capture covers; clamping", file=sys.stderr)
+            half_ns = half_ew = args.camera_m
+
     # +X North is up in the capture (yaw 0, pitch -90), so north-south maps to image Y.
     half_x_px = half_ns * px_per_m
     half_y_px = half_ew * px_per_m
@@ -88,7 +103,7 @@ def main() -> int:
     crop = img.crop(box).convert("RGB")
 
     docs = repo / "docs"
-    out = docs / "overhead_ue.png"
+    out = docs / f"overhead_ue{args.suffix}.png"
     crop.save(out)
     print(f"cropped {img.width}x{img.height} -> {crop.width}x{crop.height} "
           f"({2*half_ns:.0f} x {2*half_ew:.0f} m at {px_per_m:.2f} px/m) -> {out}")
@@ -99,7 +114,7 @@ def main() -> int:
     # both axes, so it shows slightly more east-west than the capture does. Rasterise it at
     # the capture's scale and take the same centred window, or the two panels sit at
     # different scales and the comparison quietly misleads.
-    osm_svg = docs / "overhead_osm.svg"
+    osm_svg = docs / f"overhead_osm{args.suffix}.svg"
     if osm_svg.is_file():
         square_m = 2.0 * max(half_ns, half_ew)
         square_px = round(square_m * px_per_m)
@@ -109,7 +124,7 @@ def main() -> int:
             left = round((square.width - crop.width) / 2.0)
             top = round((square.height - crop.height) / 2.0)
             square.crop((left, top, left + crop.width, top + crop.height)).save(
-                docs / "overhead_osm.png")
+                docs / f"overhead_osm{args.suffix}.png")
             tmp_png.unlink()
             print(f"rasterised {osm_svg.name} at {square_px}px -> centred "
                   f"{crop.width}x{crop.height} window, same {px_per_m:.2f} px/m")

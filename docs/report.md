@@ -202,6 +202,29 @@ Roads read differently between the panels by nature, not by error: OSM stores ro
 **centrelines** with no width, while the scene carries **derived carriageway widths** plus
 sidewalks, plazas and junction caps. That difference is most of what the translation does.
 
+### The whole extract, zoomed out
+
+The same pair at 1,330 m across — the full extent of what was fetched, so the district
+reads as a district: the avenue and street grid, the block structure, Bryant Park green in
+the source and built as ground cover in the scene, and the towers of the Sixth Avenue
+corridor against the low-rise blocks south of it.
+
+<table>
+<tr>
+<td width="50%"><img src="overhead_osm_wide.png" alt="OpenStreetMap source, wide" width="100%"></td>
+<td width="50%"><img src="overhead_ue_wide.png" alt="Generated city in Unreal Engine 5.7, wide" width="100%"></td>
+</tr>
+<tr>
+<td align="center"><em>OpenStreetMap source, 1,330 m</em></td>
+<td align="center"><em>Generated, in Unreal Engine 5.7, 1,330 m</em></td>
+</tr>
+</table>
+
+This view also shows the extent overrun plainly: the emitted scene runs well past the
+611 x 591 m that was requested, because Overpass returns intersecting ways whole. The dark
+band at the right edge is the end of the engine's ground slab, which spans the scene bounds
+plus 50 m of padding.
+
 The same ground once more, drawn from the emitted `scene.json` rather than screenshotted -
 useful for reading the data as data, with buildings shaded by height:
 
@@ -210,10 +233,12 @@ useful for reading the data as data, with buildings shaded by height:
 Reproduce all three:
 
 ```bash
-tools/render_overhead.py --area nyc_midtown     # SVG panels, from source and from scene
-# take the capture:
+tools/render_overhead.py --area nyc_midtown              # SVG panels at the bbox
+tools/render_overhead.py --area nyc_midtown --pad-m 360  # ...and wide
+# take the capture (one 4096 px shot from 1200 m serves both crops):
 #   UnrealEditor CityGen.uproject -ExecCmds="py UnrealProject/Scripts/overhead_shot.py"
-tools/crop_overhead.py --area nyc_midtown       # crop to the bbox, match the pair
+tools/crop_overhead.py --area nyc_midtown                          # bbox pair
+tools/crop_overhead.py --area nyc_midtown --extent-m 1330 --suffix _wide
 ```
 
 ---
