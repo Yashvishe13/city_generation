@@ -9,6 +9,11 @@ Buildings are the easy half. A city read as *buildings plus centrelines* looks l
 model of a city; the street is where the ground actually reads as a place. This project
 has under-built roads twice, and both times the data was there and went unused.
 
+Counts in this skill are **Midtown evidence, not expectations** — they show what a
+well-tagged dense downtown looks like. Every rule here is general; every number is a
+measurement from one extract, and yours will differ. Measure (`osm:inspection`), then
+apply the rules.
+
 The failure to avoid is not a wrong number — it is **using one tag when the area states
 twelve**. A Midtown extract states `lanes` on 82% of driveable ways, and also
 `sidewalk:*` on 73%, `oneway` on 87%, `cycleway:left/right` on ~25%, `lanes:bus` on 13%,
@@ -47,23 +52,34 @@ split them:
 | subset | Midtown count | what to do |
 |---|---|---|
 | `indoor=yes`, `tunnel=*`, `layer<0` | 93 | **exclude.** Subway passages and building concourses. Drawn at street level they pave over the street and run through buildings |
-| `footway=sidewalk`, at grade | 453 | **emit** as ribbons at curb height, ~15 cm above the carriageway |
+| `footway=sidewalk`, at grade | 453 | **emit** as `extrude` prisms at curb height, ~15-19 cm — a curb, not a plate (below) |
 | `footway=crossing`, at grade | 241 | **exclude, or emit flush at carriageway Z as markings.** These lie *on* the roadway by definition — this is the real coplanar case |
 | `footway=traffic_island` | 24 | emit at curb height, same plane as sidewalks |
 | `area=yes` + `highway` | 59 | **emit as `mesh`**, not as ribbons — they are surface polygons (in this bbox, the Times Square / Herald Square plazas) |
 | `highway=steps` | 117 | a stair is not a flat strip. Omit, or emit as a ramped mesh; count either way |
-| `highway=pedestrian`, at grade, not an area | 9 | ribbon, curb height |
+| `highway=pedestrian`, at grade, not an area | 9 | `extrude` prism, curb height |
 | `highway=cycleway` as its own way | 7 | ribbon, carriageway height |
 | `highway=elevator` | 5 | exclude — it is a vertical connector, not a surface |
 
-**`sidewalk:both=separate` is a pointer, not geometry.** All 134 Midtown occurrences are
-`separate`, which means *"the sidewalk exists and is mapped as its own way"* — it tells
-you the 453 `footway=sidewalk` ways are authoritative, it does not license you to
-synthesize a strip beside the carriageway. Synthesizing one *and* emitting the mapped way
-puts two sidewalks side by side.
+**The `sidewalk` tag's *value* decides where the geometry comes from, and this varies by
+city more than almost anything else here.** Read the value, not the key:
 
-`sidewalk=no` / `sidewalk:left=no` (11 and 10 here) is a positive statement that there is
-no sidewalk on that side. Respect it rather than defaulting one in.
+| value | meaning | what to do |
+|---|---|---|
+| `separate` | the sidewalk exists and **is mapped as its own way** | use the mapped `footway=sidewalk` ways; do **not** synthesize a strip, or you get two sidewalks side by side |
+| `both` / `left` / `right` / `yes` | the sidewalk exists and is **not** separately mapped | **synthesize** a strip beside the carriageway, offset by half the carriageway width plus half the sidewalk width |
+| `no` / `none` | there is positively no sidewalk on that side | emit nothing; do not default one in |
+
+Get this backwards and the failure is silent either way: synthesizing where the value is
+`separate` doubles every sidewalk, and refusing to synthesize where the value is `both`
+leaves a city with no pedestrian surface at all while the data plainly said there was one.
+
+Which value dominates is a property of the city, not of OSM. Midtown Manhattan is
+`separate` on all 134 tagged driveable ways, so its 453 mapped sidewalk ways are
+authoritative and synthesis would be wrong. Plenty of European extracts are the opposite,
+carrying `sidewalk=both` with no separate geometry at all, where synthesis is the only way
+to get a pedestrian realm. **Count the values before choosing a strategy** — and if an area
+mixes them, branch per way rather than picking one rule for the whole extract.
 
 Curb height is what makes this safe. Sidewalks and the carriageway are not coplanar in
 reality and must not be coplanar in the scene: give the pedestrian plane a distinct Z and
