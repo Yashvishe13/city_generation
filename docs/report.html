@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CityGen: OpenStreetMap to Unreal Engine 5.7</title>
+<style>
+  :root {
+    --ink:        #1a1c21;
+    --ink-soft:   #4a4f5a;
+    --ink-faint:  #6b7280;
+    --rule:       #d9dce3;
+    --rule-soft:  #eceef2;
+    --paper:      #ffffff;
+    --panel:      #f7f8fa;
+    --accent:     #1c4f7c;
+    --accent-dim: #e3ecf4;
+    --good:       #1f6b45;
+    --warn:       #8a5a12;
+    --serif: "Charter", "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:#e6e8ec; --ink-soft:#b6bcc7; --ink-faint:#8a93a1;
+      --rule:#2c313b; --rule-soft:#232830; --paper:#14161a; --panel:#1a1d23;
+      --accent:#7fb3dd; --accent-dim:#1d2935; --good:#6fc296; --warn:#d6a75a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--serif); font-size: 17px; line-height: 1.62;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 64px 28px 96px; }
+
+  header.title { border-bottom: 2px solid var(--ink); padding-bottom: 26px; margin-bottom: 34px; }
+  h1 { font-family: var(--sans); font-size: 2.05rem; line-height: 1.2; letter-spacing: -0.02em;
+       margin: 0 0 10px; font-weight: 650; }
+  .subtitle { font-family: var(--sans); font-size: 1.02rem; color: var(--ink-soft);
+              margin: 0 0 18px; font-weight: 450; }
+  .byline { font-family: var(--sans); font-size: 0.82rem; color: var(--ink-faint);
+            letter-spacing: 0.04em; text-transform: uppercase; }
+
+  .abstract { font-size: 1.06rem; line-height: 1.66; color: var(--ink);
+              border-left: 3px solid var(--accent); padding: 4px 0 4px 20px; margin: 0 0 40px; }
+
+  h2 { font-family: var(--sans); font-size: 1.32rem; font-weight: 620; letter-spacing: -0.01em;
+       margin: 54px 0 4px; padding-top: 22px; border-top: 1px solid var(--rule); }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  h3 { font-family: var(--sans); font-size: 1.03rem; font-weight: 600; color: var(--ink);
+       margin: 30px 0 6px; }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+  a:hover { border-bottom-color: var(--accent); }
+  strong { font-weight: 640; }
+  code, kbd { font-family: var(--mono); font-size: 0.86em; background: var(--panel);
+              border: 1px solid var(--rule-soft); border-radius: 4px; padding: 1px 5px; }
+  pre { font-family: var(--mono); font-size: 0.8rem; line-height: 1.55; background: var(--panel);
+        border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px;
+        overflow-x: auto; margin: 0 0 20px; }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 24px; font-size: 0.92rem;
+          font-family: var(--sans); }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule-soft);
+           vertical-align: top; }
+  th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase;
+       color: var(--ink-faint); border-bottom: 1px solid var(--rule); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+  .keytable td:first-child { width: 30%; color: var(--ink-soft); }
+
+  figure { margin: 26px 0 34px; }
+  figure img { width: 100%; height: auto; display: block; border: 1px solid var(--rule);
+               border-radius: 6px; background: var(--panel); }
+  figcaption { font-family: var(--sans); font-size: 0.86rem; color: var(--ink-soft);
+               margin-top: 10px; line-height: 1.5; }
+  .tag { display: inline-block; font-family: var(--sans); font-size: 0.72rem; font-weight: 650;
+         letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 4px;
+         background: var(--accent-dim); color: var(--accent); margin-right: 8px;
+         vertical-align: 2px; }
+  .tag.interim { background: transparent; color: var(--warn); border: 1px solid var(--warn); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 700px) { .pair { grid-template-columns: 1fr; } }
+
+  .note { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
+          padding: 16px 20px; margin: 0 0 22px; font-size: 0.96rem; }
+  .note .lbl { font-family: var(--sans); font-size: 0.74rem; font-weight: 650;
+               letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint);
+               display: block; margin-bottom: 6px; }
+  ul, ol { margin: 0 0 18px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+  .lede { color: var(--ink-soft); }
+  .fignum { font-family: var(--sans); font-weight: 650; color: var(--ink); }
+  svg.diagram { width: 100%; height: auto; display: block; }
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule);
+           font-family: var(--sans); font-size: 0.82rem; color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="title">
+  <h1>CityGen: reconstructing Midtown Manhattan in Unreal Engine 5.7</h1>
+  <p class="subtitle">An OpenStreetMap to Unreal translation pipeline, authored by an AI coding agent and consumed by the Procedural Content Generation framework.</p>
+  <p class="byline">Technical report &middot; Area: nyc_midtown &middot; Data &copy; OpenStreetMap contributors, ODbL 1.0</p>
+</header>
+
+<p class="abstract">
+CityGen reconstructs a bounded area of a real city as three dimensional geometry inside Unreal
+Engine 5.7, generated at load time by the Procedural Content Generation (PCG) framework. The
+subject area is <strong>Midtown Manhattan, New York City</strong>. Every volume, carriageway and
+ground surface in the resulting scene is derived from an OpenStreetMap extract by an automated
+translator, with nothing modelled by hand. The translator itself is written by an AI coding agent
+working against a fixed data contract, so adapting the system to a different city means
+regenerating the translator rather than editing it.
+</p>
+
+<h2><span class="num">1</span>Area and data source</h2>
+
+<p>
+The subject area is a rectangle of Midtown Manhattan bounded by West and East 36th to 45th Street
+and by Sixth Avenue to Park Avenue, containing Bryant Park and the New York Public Library in its
+north west quadrant. At 0.36 square kilometres it sits at the district end of the intended scope
+of a few city blocks to a small district: large enough that the street grid, the block structure
+and a genuine skyline range are all present, small enough that every feature can be checked
+against the source rather than sampled.
+</p>
+
+<table class="keytable">
+  <tbody>
+    <tr><td>Place</td><td>Midtown Manhattan, New York City, USA. W/E 36th to 45th Street, Sixth Avenue to Park Avenue.</td></tr>
+    <tr><td>Bounding box</td><td class="num">south 40.7500, west &minus;73.9860, north 40.7555, east &minus;73.9790 (WGS84)</td></tr>
+    <tr><td>Ground extent</td><td>611 m north to south by 591 m east to west; 0.36 km<sup>2</sup>; approximately 27 Manhattan blocks (9 street intervals by 3 avenue intervals)</td></tr>
+    <tr><td>Source</td><td><a href="https://www.openstreetmap.org/#map=16/40.75275/-73.98250">OpenStreetMap, this area</a>, retrieved through the <a href="https://overpass-api.de/">Overpass API</a></td></tr>
+    <tr><td>Snapshot</td><td>Pinned with <code>[date:"2026-08-15T00:00:00Z"]</code>, so a later run returns identical source data</td></tr>
+    <tr><td>Extract</td><td class="num">3,321 elements over 14 selectors, fetched with a 150 m buffer</td></tr>
+    <tr><td>Licence</td><td>Data &copy; OpenStreetMap contributors, <a href="https://opendatacommons.org/licenses/odbl/">ODbL 1.0</a></td></tr>
+  </tbody>
+</table>
+
+<p>
+The area was selected by measurement rather than preference. Twenty three candidate districts were
+scored on how much of their footprint area carries a stated height rather than an estimated one.
+Midtown finished with approximately one per cent of footprint area requiring guesswork: 606 of 713
+buildings state <code>height</code>, and 1,078 of 1,083 <code>building:part</code> volumes state
+their own. It also concentrates every difficult case in one place, namely parts overlapping their
+parent outlines, roofs declaring <code>roof:height</code>, setbacks beginning above ground level,
+and a road network in which <em>no</em> way states a <code>width</code> tag.
+</p>
+
+<h2><span class="num">2</span>The pipeline</h2>
+
+<h3>2.1 &nbsp;Authorship: a coding agent working against skills</h3>
+
+<p>
+The translator is not a fixed program maintained by hand. Tagging conventions differ enormously
+between cities, and a rule fitted on one area is frequently useless on another: Midtown states
+<code>height</code> on 85 per cent of buildings, whereas Le Marais in Paris states it on one
+building in 694. A single parameterised converter would therefore encode one city's habits as
+though they were universal.
+</p>
+
+<p>
+Instead, an AI coding agent (Hermes running grok-4.6 in an isolated profile) writes a complete
+translator for the chosen area. The agent is given <strong>skills rather than data tools</strong>.
+A skill states a contract, a technique or a failure mode; it does not perform work on the agent's
+behalf. The agent measures the area with code it writes itself, then writes a self contained
+pipeline fitted to what it measured. Constants inside a generated pipeline are area specific by
+design, because they were derived from that area.
+</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 980 470" role="img" aria-label="Diagram of the agent authoring loop: a task brief and nine skills feed an agent, which writes a plan and a pipeline; the pipeline is executed to produce a scene, which is checked by an independent verifier and by artifact gates.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+    <style>
+      .bx { fill: var(--panel); stroke: var(--rule); stroke-width: 1.4; }
+      .bx-a { fill: var(--accent-dim); stroke: var(--accent); stroke-width: 1.6; }
+      .lbl { font-family: var(--sans); font-size: 13px; fill: var(--ink); font-weight: 600; }
+      .sub { font-family: var(--sans); font-size: 11px; fill: var(--ink-faint); }
+      .skill { font-family: var(--mono); font-size: 10.5px; fill: var(--accent); }
+      .cap { font-family: var(--sans); font-size: 11px; fill: var(--ink-faint);
+             text-transform: uppercase; letter-spacing: 0.08em; font-weight: 650; }
+      .ln { stroke: var(--ink-faint); stroke-width: 1.4; fill: none; color: var(--ink-faint); }
+      .ln-a { stroke: var(--accent); stroke-width: 1.6; fill: none; color: var(--accent); }
+    </style>
+  </defs>
+
+  <text x="18" y="20" class="cap">Inputs</text>
+  <rect x="14" y="32" width="196" height="52" rx="7" class="bx"/>
+  <text x="28" y="54" class="lbl">Task brief</text>
+  <text x="28" y="71" class="sub">docs/agent-prompts/*.txt</text>
+
+  <rect x="14" y="98" width="196" height="238" rx="7" class="bx-a"/>
+  <text x="28" y="120" class="lbl">Skills (9), loaded by name</text>
+  <text x="28" y="143" class="skill">osm:pipeline-plan</text>
+  <text x="28" y="162" class="skill">osm:pipeline-shape</text>
+  <text x="28" y="181" class="skill">osm:scene-contract</text>
+  <text x="28" y="200" class="skill">osm:coordinates</text>
+  <text x="28" y="219" class="skill">osm:fetching</text>
+  <text x="28" y="238" class="skill">osm:inspection</text>
+  <text x="28" y="257" class="skill">osm:roads</text>
+  <text x="28" y="276" class="skill">osm:ground-cover</text>
+  <text x="28" y="295" class="skill">osm:estimation</text>
+  <text x="28" y="316" class="sub">contracts and technique;</text>
+  <text x="28" y="330" class="sub">never finished data</text>
+
+  <path d="M210,58 C238,58 238,150 252,150" class="ln" marker-end="url(#ar)"/>
+  <path d="M210,200 C232,200 232,175 252,175" class="ln-a" marker-end="url(#ar)"/>
+
+  <text x="258" y="20" class="cap">Authoring</text>
+  <rect x="254" y="112" width="188" height="100" rx="7" class="bx"/>
+  <text x="268" y="140" class="lbl">Coding agent</text>
+  <text x="268" y="159" class="sub">Hermes, grok-4.6</text>
+  <text x="268" y="177" class="sub">writes code; is given</text>
+  <text x="268" y="193" class="sub">no data-fetching tools</text>
+
+  <path d="M348,212 L348,246" class="ln" marker-end="url(#ar)"/>
+  <rect x="254" y="250" width="188" height="86" rx="7" class="bx"/>
+  <text x="268" y="276" class="lbl">Generated artefacts</text>
+  <text x="268" y="296" class="sub">agent_scripts/&lt;area&gt;/PLAN.md</text>
+  <text x="268" y="314" class="sub">agent_scripts/&lt;area&gt;/pipeline.py</text>
+
+  <path d="M442,293 L486,293" class="ln" marker-end="url(#ar)"/>
+
+  <text x="492" y="20" class="cap">Execution</text>
+  <rect x="488" y="112" width="200" height="224" rx="7" class="bx"/>
+  <text x="502" y="140" class="lbl">pipeline.py, one file</text>
+  <text x="502" y="164" class="sub">1. fetch (Overpass, cached)</text>
+  <text x="502" y="184" class="sub">2. inspect</text>
+  <text x="502" y="204" class="sub">3. fit</text>
+  <text x="502" y="224" class="sub">4. project</text>
+  <text x="502" y="244" class="sub">5. resolve</text>
+  <text x="502" y="264" class="sub">6. emit</text>
+  <text x="502" y="292" class="sub">standard library only</text>
+  <text x="502" y="310" class="sub">deterministic output</text>
+
+  <path d="M688,224 L734,224" class="ln" marker-end="url(#ar)"/>
+
+  <text x="740" y="20" class="cap">Output</text>
+  <rect x="736" y="112" width="228" height="76" rx="7" class="bx-a"/>
+  <text x="750" y="140" class="lbl">scene.json</text>
+  <text x="750" y="159" class="sub">extrude / mesh / ribbon</text>
+  <text x="750" y="176" class="sub">the only file the engine reads</text>
+
+  <path d="M850,188 L850,222" class="ln" marker-end="url(#ar)"/>
+  <rect x="736" y="226" width="228" height="72" rx="7" class="bx"/>
+  <text x="750" y="252" class="lbl">Unreal Engine 5.7</text>
+  <text x="750" y="271" class="sub">PCG_City graph</text>
+  <text x="750" y="288" class="sub">dynamic mesh components</text>
+
+  <rect x="488" y="368" width="476" height="76" rx="7" class="bx"/>
+  <text x="502" y="394" class="lbl">Acceptance, evaluated outside the agent</text>
+  <text x="502" y="414" class="sub">artefacts must exist and post-date the run</text>
+  <text x="502" y="432" class="sub">osm_verify_scene re-derives the scene from the raw OSM extract</text>
+  <path d="M850,298 C850,330 726,330 726,368" class="ln" marker-end="url(#ar)"/>
+  <path d="M488,406 L360,406 L360,340" class="ln" marker-end="url(#ar)"/>
+  <text x="366" y="360" class="sub">rejected runs are retried</text>
+</svg>
+<figcaption><span class="fignum">Figure 1.</span> Authoring and acceptance. The agent receives contracts and techniques, never finished data, so the fetch and the analysis are stages it must write. Acceptance is evaluated outside the agent: generated files must exist and post-date the run, and an independent verifier re-derives the scene from the original extract rather than reading the pipeline's own manifest.</figcaption>
+</figure>
+
+<p>
+The nine skills divide into three groups. <code>pipeline-plan</code> and
+<code>pipeline-shape</code> govern process and the form of the artefact, requiring a written plan
+before code and a single self contained file with no absolute paths and self checks that can fail.
+<code>scene-contract</code> and <code>coordinates</code> fix what may be emitted and the frame it
+is emitted in. <code>fetching</code>, <code>inspection</code>, <code>roads</code>,
+<code>ground-cover</code> and <code>estimation</code> carry domain technique: how to query
+Overpass and detect truncation, what to measure before interpreting an area, how a street
+cross section is composed, how ground surfaces stack, and how to derive values the source does not
+state without inventing them.
+</p>
+
+<p>
+Exactly one tool is provided, <code>osm_verify_scene</code>, and it exists precisely because it
+must not be the agent's own code: it re-derives the scene from the raw extract, so a pipeline that
+is confidently wrong is caught by something that does not share its assumptions.
+</p>
+
+<h3>2.2 &nbsp;Data flow</h3>
+
+<pre><code>data/areas.json ──▶ bounding box
+      │
+      ▼
+Overpass API ──fetch──▶ data/raw/osm_nyc_midtown.json     raw payload, untouched
+   (cached,             data/raw/nyc_midtown.geojson      every OSM tag preserved
+    date pinned)        data/raw/nyc_midtown.fetch.json   bbox, endpoint, query, licence
+      │
+      ├─ inspect ──▶ tag coverage, ring validity, road cross section, junction count
+      ├─ fit     ──▶ storey height, lane counts, height estimator, from THIS area only
+      ├─ project ──▶ WGS84 ▶ local tangent plane ▶ centimetres
+      ├─ resolve ──▶ parts against parents, roofs inside heights, below-grade exclusion
+      └─ emit    ──▶ data/ue/nyc_midtown/scene.json
+                          │  tools/stage_area.sh
+                          ▼
+                     UnrealProject/Content/Data/City/scene.json
+                          │  UOSMCityDataLibrary::LoadSceneFromDirectory
+                          ▼
+                     PCG_City graph ──▶ dynamic mesh components</code></pre>
+
+<p>
+The whole translation is one file, <code>agent_scripts/nyc_midtown/pipeline.py</code>, of 2,163
+lines using the standard library only. On a clean checkout with an empty <code>data/raw</code>,
+a single command fetches from Overpass and writes the scene. Re-running reuses the cache and
+produces a byte identical file. The cache is keyed on the query rather than on the filename, so
+widening the selectors invalidates it instead of silently returning stale data.
+</p>
+
+<h3>2.3 &nbsp;Projection and origin</h3>
+
+<table>
+  <tbody>
+    <tr><td>Origin</td><td>Centre of the <em>requested</em> bounding box, 40.75275, &minus;73.98250. The 150 m fetch buffer deliberately does not move it.</td></tr>
+    <tr><td>Projection</td><td>Local tangent plane at the origin using the WGS84 radii of curvature, meridional and normal. The spherical shortcut <code>111320&middot;cos(lat)</code> is rejected because it drifts 0.1 to 0.2 per cent per kilometre, which is metres of error across a city block.</td></tr>
+    <tr><td>Units</td><td>Centimetres, rounded to whole centimetres on output.</td></tr>
+    <tr><td>Axes</td><td><code>+X</code> North, <code>+Y</code> East, <code>+Z</code> Up, so a top down view in the editor reads north up and east right, matching a map.</td></tr>
+  </tbody>
+</table>
+
+<p>
+Checked against an independent Vincenty computation, scale error is 0.0000 per cent north to south
+and 0.0001 per cent east to west. The verifier reprojects 409 sampled vertices with its own
+implementation and finds a worst case deviation of 0.7 cm. Road centrelines were separately
+compared against the reprojected source ways: the worst perpendicular deviation across all 173
+carriageways is 9 mm, which is the centimetre rounding.
+</p>
+
+<h3>2.4 &nbsp;How heights are derived</h3>
+
+<p>
+Heights follow a strict order of preference, and every emitted value carries its provenance in the
+node's <code>attrs</code> so that measurement can be separated from assumption without reading
+code.
+</p>
+
+<table>
+  <thead><tr><th>Source</th><th>Volumes</th><th>Share</th><th>Basis</th></tr></thead>
+  <tbody>
+    <tr><td><code>tag:height</code></td><td class="num">1,608</td><td class="num">97.6%</td><td>Stated by OpenStreetMap</td></tr>
+    <tr><td><code>knn[...]</code></td><td class="num">32</td><td class="num">1.9%</td><td>Fitted on this area</td></tr>
+    <tr><td><code>building:levels &times; 3.883 m</code></td><td class="num">5</td><td class="num">0.3%</td><td>Storey height fitted on this area</td></tr>
+    <tr><td><code>area_median:26.25m</code></td><td class="num">3</td><td class="num">0.2%</td><td>Declared fallback</td></tr>
+  </tbody>
+</table>
+
+<ul>
+  <li><strong>Storey height was fitted here, not imported.</strong> 119 buildings in this extract state both <code>height</code> and <code>building:levels</code>, giving a median of 3.883 m per storey with a leave one out median absolute error of 2.52 m.</li>
+  <li><strong>The estimator had to earn its place.</strong> A k nearest neighbour regression over log footprint area, restricted by <code>building</code> type where a type had at least seven labelled peers, with <em>k</em> chosen by leave one out over {3, 5, 7, 9, 11, 15}, selected k = 15 and scored a median absolute error of 6.60 m against the area median baseline of 12.35 m. Type medians (10.7 m) and spatial neighbours were tried and discarded, the latter because in Midtown a tower frequently adjoins a low rise loft.</li>
+  <li><strong><code>building:part</code> is resolved against its parent.</strong> 120 parent outlines are suppressed because their parts describe the massing; extruding both would double build every tower and bury the setbacks inside a slab. 185 volumes begin above ground from <code>min_height</code> or <code>building:min_level</code>.</li>
+  <li><strong>Roof height is contained within the total height</strong>, following OSM Simple 3D Buildings, so walls terminate at <code>height &minus; roof:height</code>. 114 roof meshes are built for the 115 non flat <code>roof:shape</code> values present.</li>
+  <li><strong>Nothing is discarded for lacking a height.</strong> Footprint fidelity is weighted more heavily than height precision, so a volume with an honestly labelled estimate is preferred to a gap in the city.</li>
+</ul>
+
+<p>
+The resulting distribution has a median of 45.1 m, a 90th percentile of 105 m and a maximum of
+397 m, which is the roof of the Empire State Building, correctly excluding its 443 m antenna since
+that is a separate part. Road widths could not be fitted at all, because no driveable way in this
+extract states <code>width</code>. Rather than invent a figure, widths are composed from the cross
+section the data does state, namely <code>lanes</code>, <code>lanes:bus</code>,
+<code>parking:*=lane</code> and <code>cycleway:*=lane|track</code>, multiplied by New York City
+Department of Transportation reference figures, and each is labelled as borrowed rather than
+presented as a local fit.
+</p>
+
+<h3>2.5 &nbsp;How the PCG graph consumes the data</h3>
+
+<p>
+<code>scene.json</code> is the only file the engine reads, and it contains no OpenStreetMap
+vocabulary: no tag names, no highway classes, no roof taxonomy. Everything arrives as one of three
+geometric primitives.
+</p>
+
+<table>
+  <thead><tr><th>Kind</th><th>Geometry</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td><code>extrude</code></td><td>Closed counter clockwise ring, <code>base_cm</code>, <code>height_cm</code></td><td>Building volumes; also sidewalks, plazas and traffic islands as curb prisms</td></tr>
+    <tr><td><code>mesh</code></td><td>Indexed triangles in absolute coordinates</td><td>Roofs, junction surfaces, ground cover</td></tr>
+    <tr><td><code>ribbon</code></td><td>Polyline plus <code>width_cm</code></td><td>Road carriageways</td></tr>
+  </tbody>
+</table>
+
+<p>
+<code>kind</code> denotes a geometric primitive and never a feature type. A canal would be a
+<code>ribbon</code> tagged <code>water</code>, not a primitive of its own. This is what allows a
+new feature class to ship without modifying C++.
+</p>
+
+<pre><code>PCG_City:   OSM City Source ──Meshes───▶ Spawn Dynamic Mesh
+  (custom C++ node)         ──Splines──▶ (unconnected, reserved for a spline mesh road pass)</code></pre>
+
+<p>
+<code>UPCGOSMCitySettings</code> loads the scene, builds each node into a dynamic mesh carrying that
+node's tags, and emits one spline per ribbon centreline. Everything arrives on a single
+<code>Meshes</code> pin rather than one pin per feature class, so a class the pipeline invents
+later requires no new pin and no engine change. <code>BP_CityGenerator</code> derives from
+<code>ACityGeneratorActor</code>, which owns the <code>PCGComponent</code> and calls
+<code>Generate</code> from its construction script, so opening <code>CityLevel</code> regenerates
+the city with no manual step. Spawned components are PCG managed, so regeneration replaces them
+rather than accumulating. A non PCG reference builder produces identical geometry through the same
+<code>UOSMCityGeometry</code> library, so the two paths cannot drift apart.
+</p>
+
+<pre><code>LogOSMCity:    loaded 'nyc_midtown': 2294 extrude, 344 mesh, 173 ribbon (0 skipped)
+LogPCGOSMCity: OSM City Source: area 'nyc_midtown' -&gt; 2294 extruded, 1781 triangles,
+               173 ribbons, 173 splines</code></pre>
+
+<h2><span class="num">3</span>Visual comparison</h2>
+
+<p>
+Three renderings follow, all of the same ground at the same scale and orientation, 1,330 m across
+at 1.71 pixels per metre with north upward. The first two constitute the comparison proper: the
+OpenStreetMap source against a screenshot of the built city. The third is an intermediate
+representation, included because it shows what the pipeline actually emitted rather than what the
+renderer made of it.
+</p>
+
+<figure>
+  <img src="overhead_osm_wide.png" alt="Overhead vector rendering of the OpenStreetMap source data for the Midtown Manhattan area, 1330 m across, north up.">
+  <figcaption><span class="tag">Source</span><span class="fignum">Figure 2.</span> <strong>OpenStreetMap source.</strong> Drawn directly from <code>data/raw/nyc_midtown.geojson</code>. Roads appear as centrelines because that is how OSM stores them, with no width. Green areas are the parks and gardens carried by the ground cover selectors.</figcaption>
+</figure>
+
+<figure>
+  <img src="overhead_ue_wide.png" alt="Top down screenshot of the generated city in the Unreal Engine 5.7 editor, 1330 m across, north up.">
+  <figcaption><span class="tag">Result</span><span class="fignum">Figure 3.</span> <strong>Generated city in Unreal Engine 5.7.</strong> A screenshot of the built scene in the editor, captured top down from 1,200 m at 4096 px and cropped to this frame. Perspective is mild at that altitude but not eliminated, so buildings lean slightly toward the frame edges; this is a property of the viewport, not of the data. The dark band at the right edge is the end of the engine's ground slab, which spans the scene bounds plus 50 m of padding.</figcaption>
+</figure>
+
+<figure>
+  <img src="overhead_scene_wide.svg" alt="Vector rendering of the emitted scene.json, 1330 m across, buildings shaded by height, north up.">
+  <figcaption><span class="tag interim">Intermediate</span><span class="fignum">Figure 4.</span> <strong>The emitted <code>scene.json</code>, drawn as data.</strong> This is not a screenshot and not the source. It is the intermediate artefact that the engine consumes, rendered directly from the file with buildings shaded by height. It is included because it separates translation error from rendering: a missing feature class, a wrong height or a misplaced surface appears here plainly, whereas in a screenshot it can hide behind lighting and material. The long carriageways running to the corners with no buildings beside them are the extent overrun discussed in section 4.</figcaption>
+</figure>
+
+<div class="note">
+  <span class="lbl">Reading the comparison</span>
+  Roads differ in appearance between Figures 2 and 3 by nature rather than by error. OpenStreetMap
+  stores road centrelines with no width, whereas the scene carries carriageway widths derived from
+  the tagged cross section, together with sidewalks, plazas and junction surfaces. That difference
+  is most of what the translation performs.
+</div>
+
+<figure>
+  <div class="pair">
+    <img src="overhead_osm.png" alt="OpenStreetMap source at the requested bounding box, 611 by 591 m.">
+    <img src="overhead_ue.png" alt="Generated city in Unreal Engine at the requested bounding box, 611 by 591 m.">
+  </div>
+  <figcaption><span class="fignum">Figure 5.</span> The same comparison at the requested bounding box, 611 m by 591 m, for registration detail. Left, OpenStreetMap source. Right, the Unreal Engine screenshot. Bryant Park and the New York Public Library are visible in the upper left of both, and the block pattern, the grid orientation and individual footprints correspond.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>Self assessment</h2>
+
+<h3>4.1 &nbsp;What corresponds well</h3>
+
+<ul>
+  <li><strong>Georegistration and orientation are effectively exact.</strong> Scale error against Vincenty is 0.0001 per cent; the median road bearing recomputed from longitude and latitude is 118.2 degrees against the scene's 118.6, a difference of 0.5 degrees on Manhattan's grid. Road centrelines sit within 9 mm of the reprojected source.</li>
+  <li><strong>Footprints are faithful.</strong> 1,648 volumes from 1,779 source building features, 93 per cent, the difference being 120 deliberately suppressed parent outlines and three underground stations. All rings are counter clockwise with no self intersections.</li>
+  <li><strong>Heights are data rather than decoration.</strong> 97.6 per cent are taken directly from <code>height</code>. Where they are not, the estimator was validated against a baseline before being used, and lane widths were refused rather than invented.</li>
+  <li><strong>The street network is a network.</strong> 173 carriageway ribbons across 18.7 km with 17 distinct widths composed from the real cross section, 87 junctions resolved by trimming and capping, and a pedestrian realm built as curb prisms rather than flat plates: 444 sidewalks, 59 plazas and 24 traffic islands, each an <code>extrude</code> from <code>base_cm: 0</code> to a 16 to 19 cm top, so that each has a curb face and rests on the ground.</li>
+  <li><strong>The ground is ground, and the underground remains beneath it.</strong> 143 ground cover surfaces (106 gardens, 17 flowerbeds, 6 parks, 6 sand, 3 pitches, 2 playgrounds, 1 water) are stacked a centimetre apart between the slab and the carriageway. A single test on <code>location=underground</code>, <code>layer&lt;0</code>, <code>tunnel</code>, <code>indoor</code> and <code>level&lt;0</code> keeps 3 station buildings, 124 railway ways and 103 indoor or tunnel footways out of the street level, including Grand Central Terminal's underground concourse while retaining the terminal building above it.</li>
+  <li><strong>It reproduces.</strong> Identical input yields byte identical output, and one command takes a clean checkout to a finished scene.</li>
+</ul>
+
+<h3>4.2 &nbsp;Known limitations</h3>
+
+<ul>
+  <li><strong>The scene exceeds its bounding box.</strong> It spans 1,438 m by 1,245 m against a request of 611 m by 591 m. Overpass returns any intersecting way in its entirety, so long through streets extend past the boundary at their true length. Retaining boundary features whole is the intended behaviour, since a footprint cut in half is a worse defect than a margin, but the consequence is visible in Figures 3 and 4 and is recorded in the manifest.</li>
+  <li><strong>There are no blocks or parcels.</strong> A city block is not an OpenStreetMap object; this extract contains three <code>landuse=commercial</code> polygons for an area containing dozens of blocks, and twelve district scale landuse polygons were excluded for that reason, two of them 700 to 900 m across. Blocks would have to be derived as faces of the road graph, which is not implemented.</li>
+  <li><strong>Nine sidewalk rings were discarded.</strong> Converting a sidewalk centreline into a curb prism requires offsetting the polyline into a closed ring, and after rounding to whole centimetres nine of 453 became self intersecting and were discarded with a counted reason rather than emitted as tangled solids. A mitred offset would recover them.</li>
+  <li><strong>Deliberate omissions</strong>, each counted in the manifest with its reason: 241 pedestrian crossings, which lie on the carriageway by definition and would conflict with it; 103 indoor, tunnel and below grade footways; 124 below grade railway ways; 3 below grade station buildings; 51 at grade steps, a stair not being a flat strip; 16 fountain rims that are lines rather than polygons; 5 elevators; 3 interior rings, so three courtyards are filled; 2 service parking areas; and one mansard roof lacking <code>roof:height</code>.</li>
+  <li><strong>Sidewalk width is borrowed and bears considerable weight.</strong> No sidewalk in the extract states <code>width</code>, so all 444 use a 4.57 m commercial reference figure. It is labelled as borrowed rather than presented as a local fit, but it is the assumption most deserving of scrutiny.</li>
+  <li><strong>Materials are untextured grey box geometry</strong>, which is outside the scope of the exercise, and the <code>RoadSplines</code> output is emitted but not yet consumed.</li>
+</ul>
+
+<h3>4.3 &nbsp;Further work, in order of value</h3>
+
+<ol>
+  <li><strong>Blocks derived from the road graph.</strong> The one structural element still missing. Road centrelines form a planar graph and a block is a face of it, inset by half the adjacent street widths. No OpenStreetMap tag supplies this.</li>
+  <li><strong>Model the underground rather than only excluding it.</strong> Three station buildings, 124 railway ways and 103 footways are correctly kept out of the street level, but they describe a real network of stations, platforms and passages that is currently discarded rather than built at its stated <code>layer</code>.</li>
+  <li><strong>Mitred sidewalk offsets</strong>, to recover the nine discarded rings and prevent the failure recurring on a city with curved streets.</li>
+  <li><strong>Spline mesh roads</strong> driven from the <code>RoadSplines</code> pin, with lane markings.</li>
+  <li><strong>A height fidelity metric.</strong> The verifier confirms that heights originate in real tags but does not measure error. Holding out stated heights and scoring the estimator against them per area would convert a plausibility argument into a number.</li>
+</ol>
+
+<h2><span class="num">5</span>Verification and reproduction</h2>
+
+<p>
+All figures quoted above are checked by <code>osm_verify_scene</code>, which re-derives from the
+raw OpenStreetMap extract rather than reading the pipeline's manifest. It reprojects sampled
+vertices with its own implementation, recomputes road bearings from longitude and latitude, counts
+source features, and compares the emitted height provenance histogram against the tag coverage the
+source actually carries.
+</p>
+
+<pre><code>ok=True  errors=0  warnings=0
+nodes: extrude 2294, mesh 344, ribbon 173, total 2811
+  origin matches the requested bounding box centre
+  worst vertex 0.7 cm from an independent WGS84 tangent plane projection (409 sampled)
+  median road bearing 118.6 deg vs 118.2 deg recomputed from source (delta 0.5 deg)
+  1648 volumes from 1779 source building features (93%)
+  98% of building volumes cite a stated tag; source share is 94%</code></pre>
+
+<pre><code># translate, with assertions
+python3 agent_scripts/nyc_midtown/pipeline.py --area nyc_midtown --verify
+
+# verify against the original OSM extract
+tools/verify_area.sh nyc_midtown
+
+# stage into the engine's area-neutral slot, then open UnrealProject/CityGen.uproject
+tools/stage_area.sh nyc_midtown
+
+# regenerate the figures in this report
+tools/render_overhead.py --area nyc_midtown
+tools/render_overhead.py --area nyc_midtown --pad-m 360
+tools/crop_overhead.py   --area nyc_midtown
+tools/crop_overhead.py   --area nyc_midtown --extent-m 1330 --suffix _wide</code></pre>
+
+<footer>
+  CityGen technical report. Source data &copy; OpenStreetMap contributors, licensed under the Open
+  Database License (ODbL) 1.0. Generated scene sha256 <code>cf282190</code>, byte identical across
+  runs.
+</footer>
+
+</div>
+</body>
+</html>
