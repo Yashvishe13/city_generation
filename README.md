@@ -16,6 +16,20 @@ to it. What stays constant is the contract it writes against.
 Default area: **Midtown Manhattan** (`nyc_midtown`). Four more presets in
 `data/areas.json`.
 
+## Getting the project
+
+```bash
+git lfs install                                              # once per machine
+git clone https://github.com/Yashvishe13/city_generation.git
+cd city_generation
+```
+
+The Unreal assets, the report figures and `demo/demo.mp4` are stored as ordinary git
+objects, so downloading the repository as a ZIP works too. `git lfs install` is still
+worth running before cloning: the vendored `hermes-agent/` tree keeps its own images in
+LFS, and without it those arrive as pointer files. Nothing in the pipeline or the Unreal
+project depends on them.
+
 ## Quick start
 
 ```bash
