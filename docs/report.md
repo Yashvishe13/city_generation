@@ -172,6 +172,19 @@ LogPCGOSMCity: OSM City Source: area 'nyc_midtown' -> 2294 extruded, 1781 triang
 
 ## 3. Visual comparison
 
+Three different things are shown in this section, and the filenames alone do not say which
+is which:
+
+| figure | drawn from |
+|---|---|
+| `overhead_osm*` | the OSM source, `data/raw/nyc_midtown.geojson`, as vector |
+| `overhead_ue*` | **a screenshot of the built city** in the Unreal editor |
+| `overhead_scene*` | the emitted `data/ue/nyc_midtown/scene.json` — the data the engine consumes, drawn as vector rather than screenshotted |
+
+The first two are the comparison. The third is how to read the output *as data*: it shows
+what was emitted rather than what the renderer made of it, with buildings shaded by height,
+so a missing class or a wrong height reads immediately instead of hiding behind lighting.
+
 **Left: OpenStreetMap. Right: the generated city in Unreal Engine 5.7.** Same ground, same
 extent, same scale, north up in both — 611 x 591 m, the requested bbox exactly, at 1.71
 pixels per metre.
@@ -224,6 +237,12 @@ This view also shows the extent overrun plainly: the emitted scene runs well pas
 611 x 591 m that was requested, because Overpass returns intersecting ways whole. The dark
 band at the right edge is the end of the engine's ground slab, which spans the scene bounds
 plus 50 m of padding.
+
+And the same wide frame as **data** — every node in `scene.json`, buildings shaded by
+height, ground cover and the pedestrian realm in their own tones. Nothing here is lighting
+or material: if a class were missing or a height wrong, it would show here first.
+
+<img src="overhead_scene_wide.svg" alt="Generated scene.json, wide, drawn as data" width="100%">
 
 The same ground once more, drawn from the emitted `scene.json` rather than screenshotted -
 useful for reading the data as data, with buildings shaded by height:
