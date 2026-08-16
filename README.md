@@ -3,6 +3,10 @@
 Reconstructs a real city area in UE 5.7 from OpenStreetMap: buildings, roads and ground,
 extruded and placed from the source data, with no hand-modelling.
 
+📄 **[Read the technical report](https://yashvishe13.github.io/citygen-report/)** — area and
+data source, the pipeline, the overhead comparison against OpenStreetMap, and an honest
+self assessment.
+
 The translation is not a fixed program. A coding agent writes a **pipeline per area**,
 because tagging habits differ enormously between cities — Midtown Manhattan states
 `height` on 84% of buildings, Le Marais on 1 building in 694, and a rule fitted on one is
