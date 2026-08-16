@@ -454,6 +454,19 @@ renderer made of it.
 <ul>
   <li><strong>The scene exceeds its bounding box.</strong> It spans 1,438 m by 1,245 m against a request of 611 m by 591 m. Overpass returns any intersecting way in its entirety, so long through streets extend past the boundary at their true length. Retaining boundary features whole is the intended behaviour, since a footprint cut in half is a worse defect than a margin, but the consequence is visible in Figures 3 and 4 and is recorded in the manifest.</li>
   <li><strong>Deliberate omissions</strong>, each counted in the manifest with its reason: 241 pedestrian crossings, which lie on the carriageway by definition and would conflict with it; 103 indoor, tunnel and below grade footways; 124 below grade railway ways; 3 below grade station buildings; 51 at grade steps, a stair not being a flat strip; 16 fountain rims that are lines rather than polygons; 5 elevators; 3 interior rings, so three courtyards are filled; 2 service parking areas; and one mansard roof lacking <code>roof:height</code>.</li>
+  <li><strong>Adjacent buildings flicker where they touch.</strong> Moving the camera close to
+    the facades reveals a shimmering, speckled line along the joins between neighbouring
+    buildings. The cause is that most buildings in Manhattan are built right up to the property
+    line, so they share a wall with the building next door. OpenStreetMap records each building
+    as its own outline, and those outlines have the shared edge in common, so the pipeline
+    faithfully builds two walls in exactly the same place. The renderer then has two surfaces at
+    the same depth and no way to decide which one is in front, and it alternates between them
+    from pixel to pixel. In this area 1,450 of the 1,648 building volumes, or 88 per cent, have a
+    wall coincident with a neighbour's. The same applies to the parts of a single tower, which
+    also abut one another exactly. This is neither an engine defect nor a translation error: it is
+    what happens when one real wall is modelled as two. Removing it means merging volumes that
+    share a wall into a single solid, or insetting the shared edges slightly so the two surfaces
+    no longer coincide.</li>
   <li><strong>Sidewalk width is borrowed and bears considerable weight.</strong> No sidewalk in the extract states <code>width</code>, so all 444 use a 4.57 m commercial reference figure. It is labelled as borrowed rather than presented as a local fit, but it is the assumption most deserving of scrutiny.</li>
 </ul>
 
