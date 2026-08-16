@@ -99,6 +99,14 @@ Reuse them on every run unless `--force`. A cached result must report the bbox i
 *actually* covers, not the one this invocation asked for — read it back out of the
 sidecar rather than assuming.
 
+**Key the cache on the query, not on the filename.** A cache that is reused whenever the
+file merely exists is a silent-failure machine: widen the selectors to pick up parks and
+water, re-run, and you get the old narrow extract back, emit no ground cover, and report
+success — the pipeline did everything right against data that predates the change. The
+sidecar already records `selectors`, `bbox_requested`, `buffer_m` and `date_pinned`.
+Compare all four against what this run is asking for, and re-fetch if any differ. Say in
+the log which one changed, so a re-download is never a mystery.
+
 The sidecar carries enough for a reviewer to re-run your fetch: `area`,
 `bbox_requested_south_west_north_east`, `bbox_fetched_south_west_north_east`, `buffer_m`,
 `date_pinned`, `endpoint`, `fetched_utc`, the `osm3s` copyright block Overpass returns,

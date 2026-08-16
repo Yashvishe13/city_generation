@@ -46,7 +46,10 @@ building=train_station with location=underground and layer<0, up to 737 m across
 same layer/tunnel/location test to buildings that you apply to highways and railways.
 
 Ground cover is not in the default selectors and must be added: leisure, landuse,
-natural, water, waterway, railway. In this bbox that is ~303 elements, mostly Bryant
+natural, water, waterway, railway. The cached extract in data/raw predates those
+selectors - it holds 1 leisure and 2 landuse features and no water or railway at all - so
+this run MUST re-fetch. Key the cache on the query (selectors, bbox, buffer, date), not on
+whether the file exists, or a widened selector list silently returns the old narrow data. In this bbox that is ~303 elements, mostly Bryant
 Park's gardens and fountains, plus 58 railway=subway ways that are BELOW GRADE and must
 be excluded like the indoor footways. Give every flat class its own Z. The engine's
 ground slab is appended with Origin=Base at Z=-100, so its TOP is at Z=0 - that is the
