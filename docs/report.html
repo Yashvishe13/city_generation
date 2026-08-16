@@ -114,9 +114,7 @@ CityGen reconstructs a bounded area of a real city as three dimensional geometry
 Engine 5.7, generated at load time by the Procedural Content Generation (PCG) framework. The
 subject area is <strong>Midtown Manhattan, New York City</strong>. Every volume, carriageway and
 ground surface in the resulting scene is derived from an OpenStreetMap extract by an automated
-translator, with nothing modelled by hand. The translator itself is written by an AI coding agent
-working against a fixed data contract, so adapting the system to a different city means
-regenerating the translator rather than editing it.
+translator. The translator itself is written by an AI coding agent, so that it remains transferable to new city
 </p>
 
 <h2><span class="num">1</span>Area and data source</h2>
@@ -142,16 +140,6 @@ against the source rather than sampled.
   </tbody>
 </table>
 
-<p>
-The area was selected by measurement rather than preference. Twenty three candidate districts were
-scored on how much of their footprint area carries a stated height rather than an estimated one.
-Midtown finished with approximately one per cent of footprint area requiring guesswork: 606 of 713
-buildings state <code>height</code>, and 1,078 of 1,083 <code>building:part</code> volumes state
-their own. It also concentrates every difficult case in one place, namely parts overlapping their
-parent outlines, roofs declaring <code>roof:height</code>, setbacks beginning above ground level,
-and a road network in which <em>no</em> way states a <code>width</code> tag.
-</p>
-
 <h2><span class="num">2</span>The pipeline</h2>
 
 <h3>2.1 &nbsp;Authorship: a coding agent working against skills</h3>
@@ -167,10 +155,6 @@ though they were universal.
 <p>
 Instead, an AI coding agent (Hermes running grok-4.6 in an isolated profile) writes a complete
 translator for the chosen area. The agent is given <strong>skills rather than data tools</strong>.
-A skill states a contract, a technique or a failure mode; it does not perform work on the agent's
-behalf. The agent measures the area with code it writes itself, then writes a self contained
-pipeline fitted to what it measured. Constants inside a generated pipeline are area specific by
-design, because they were derived from that area.
 </p>
 
 <figure>
@@ -280,8 +264,9 @@ state without inventing them.
 
 <p>
 Exactly one tool is provided, <code>osm_verify_scene</code>, and it exists precisely because it
-must not be the agent's own code: it re-derives the scene from the raw extract, so a pipeline that
-is confidently wrong is caught by something that does not share its assumptions.
+must not be the agent's own code: a checker written by the same process that wrote the pipeline
+would share its assumptions and confirm them. Section 5.1 describes what it checks and how
+acceptance is evaluated outside the agent.
 </p>
 
 <h3>2.2 &nbsp;Data flow</h3>
@@ -488,12 +473,39 @@ renderer made of it.
 
 <h2><span class="num">5</span>Verification and reproduction</h2>
 
+<h3>5.1 &nbsp;How the independent verifier works</h3>
+
 <p>
-All figures quoted above are checked by <code>osm_verify_scene</code>, which re-derives from the
-raw OpenStreetMap extract rather than reading the pipeline's manifest. It reprojects sampled
-vertices with its own implementation, recomputes road bearings from longitude and latitude, counts
-source features, and compares the emitted height provenance histogram against the tag coverage the
-source actually carries.
+Every figure quoted above is produced by <code>osm_verify_scene</code>, which runs nineteen checks
+in two families. The first family reads each node in isolation against the contract: schema and
+known primitives, required fields, ring winding, ring shape and self intersection, height above
+base, mesh index ranges, ribbon validity and provenance labelling. The second family is the reason
+the tool exists, because it ignores the pipeline's own manifest and <strong>re-derives from the raw
+OpenStreetMap extract</strong>: it reprojects four hundred sampled vertices using its own
+independent implementation of the tangent plane, recomputes road bearings from longitude and
+latitude, recomputes the bounding box centre, counts source features by class, and compares the
+emitted height provenance histogram against the tag coverage the source actually carries. Nothing
+in it is specific to this city. The orientation check does not know that Manhattan's grid runs
+roughly twenty nine degrees east of north; it derives the expected bearing from the source data of
+whatever area it is given, so the same checks apply unchanged to Munich or Le Marais. Its only
+constants are the WGS84 radii and a handful of generic thresholds. The value of independence is
+best shown by a failure it caught: an earlier scene had geometrically flawless footprints, all
+counter clockwise, all correctly placed, in which every height had silently become a single
+invented constant because tags were being read at the wrong nesting level. Every contract check
+passed, because the shapes genuinely were right. Only a comparison against the source could see
+that the meaning had been lost.
+</p>
+
+<p>
+The phrase <em>evaluated outside the agent</em> carries a second meaning as well. The verifier is
+not merely independent code, it is also executed by the harness rather than reported by the agent.
+<code>tools/agent_task.sh</code> requires that the expected artefacts exist and post-date the run,
+then runs <code>tools/verify_area.sh</code> itself; a run that reports success without producing
+files, or produces files that fail verification, is rejected and retried with the failure text
+appended to its own prompt. This exists for a concrete reason. Twice during development an agent
+reported completed work without having written a file, once quoting a verifier result it had never
+obtained. Acceptance therefore depends on the checks actually running, never on an account of them
+having run.
 </p>
 
 <pre><code>ok=True  errors=0  warnings=0
