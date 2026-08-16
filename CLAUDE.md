@@ -171,25 +171,20 @@ reference path and the graded path cannot drift.
 
 ## State / next steps
 
-Done: the scene contract + skills; C++ loader, shared geometry lib; PCG source node +
-`PCG_City` graph + `BP_CityGenerator`; non-PCG reference builder; headless authoring;
-independent verification against the OSM source; agent harness with artifact and
-verification gates.
+`agent_scripts/nyc_midtown/` regenerated under the nine-skill harness. 2811 nodes: 2294
+extrude (1648 building volumes + 646 pedestrian curb prisms), 344 mesh (114 roofs, 87
+junction caps, 143 ground cover), 173 ribbons. 97.6% of heights from `tag:height`,
+byte-identical on re-run, confirmed loading in the editor with 0 skipped.
 
-`agent_scripts/nyc_midtown/` regenerated under the skills-only harness (1535 lines, its
-own pinned Overpass fetch): 1651 extrude / 114 mesh / 181 ribbon, 97.4% of heights from
-`tag:height`, 120 parent slabs replaced by their parts, byte-identical on re-run, and
-confirmed loading in the editor (`LogPCGOSMCity: OSM City Source`, 0 skipped).
+Fixed in this round: ground cover (Bryant Park has a lawn), curbs as `extrude` prisms
+rather than flat plates, below-grade exclusion applied to buildings (3 subway complexes
+that were standing on the street, and were inflating the scene to ~6x its requested area),
+and the fetch cache keyed on the query rather than on the filename.
 
-The previous pipeline validated clean and was wrong anyway — tags read from the wrong
-nesting level, so all 606 stated heights fell through to a constant; parent and part both
-extruded (1777 extrudes from ~713 buildings); roofs never built; `--verify` printed
-success without asserting. The verifier now carries a `height_provenance` check that
-compares the emitted `height_source` histogram against the tag coverage in the source
-extract, which catches exactly that class of failure: geometry perfect, meaning gone.
+Still open: no blocks or parcels — a city block is not an OSM object, so they would have to
+be derived as faces of the road graph; the underground is excluded rather than modelled;
+9 of 453 sidewalk rings self-intersect after cm rounding and are dropped; the scene still
+spans 1438 x 1245 m against a 611 x 591 m request because Overpass returns intersecting
+ways whole; `demo/demo.mp4` (30-90 s) is not recorded.
 
-Next: below-grade buildings (3 subway complexes are extruded at street level, which is
-what inflates the scene to ~6x the requested area - deferred, subway deserves its own
-layer);
-curbs as `extrude` prisms rather than flat plates; ground cover; road spline meshes off
-the `RoadSplines` pin; `demo/demo.mp4` (30–90 s, hard gate). `docs/report.md` is written.
+`docs/report.md` is current with all of the above.

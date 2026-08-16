@@ -35,6 +35,15 @@ SELECTORS = (
     'relation["building"]',
     'relation["building:part"]',
     'way["highway"]',
+    'way["leisure"]',
+    'relation["leisure"]',
+    'way["landuse"]',
+    'relation["landuse"]',
+    'way["natural"]',
+    'way["water"]',
+    'way["waterway"]',
+    'way["amenity"="parking"]',
+    'way["railway"]',
 )
 OVERPASS_ENDPOINTS = (
     "https://overpass-api.de/api/interpreter",
@@ -82,9 +91,37 @@ SERVICE_LANE_FALLBACK = 1.0
 CURB_Z_CM = 19
 PLAZA_Z_CM = 16
 JUNCTION_LIFT_CM = 2
+# Ground cover sits in the 0..4 cm band between the slab top (Z=0) and the
+# carriageway (RibbonZOffsetCm = 4). Each class has its own Z so nested
+# Bryant Park polygons do not z-fight. Nothing ground-cover goes below 0:
+# the slab is Origin=Base at Z=-100, so its top is Z=0.
+GROUND_Z_CM = {
+    "landuse": 1,
+    "parking": 1,
+    "park": 2,
+    "garden": 2,
+    "pitch": 3,
+    "playground": 3,
+    "flowerbed": 3,
+    "sand": 3,
+    "water": 3,
+}
 KNN_K_CANDIDATES = (3, 5, 7, 9, 11, 15)
 KNN_TYPE_MIN = 7
 
+DISTRICT_LANDUSE = frozenset(
+    {
+        "commercial",
+        "retail",
+        "industrial",
+        "residential",
+        "construction",
+        "brownfield",
+        "railway",
+        "education",
+        "institutional",
+    }
+)
 IDENTITY_KEYS = frozenset({"osm_id", "osm_type"})
 
 
@@ -505,6 +542,40 @@ def load_area_bbox(repo: Path, area: str) -> list[float]:
     return list(data[area]["bbox"])
 
 
+def _floats_close(a, b) -> bool:
+    if a is None or b is None:
+        return False
+    try:
+        aa = [float(x) for x in a]
+        bb = [float(x) for x in b]
+    except (TypeError, ValueError):
+        return False
+    if len(aa) != len(bb):
+        return False
+    return all(abs(x - y) < 1e-9 for x, y in zip(aa, bb))
+
+
+def cache_mismatches(sidecar: dict, wanted: dict) -> list[str]:
+    """Reuse the cache only when the query itself matches, not just the filename."""
+    reasons = []
+    if list(sidecar.get("selectors") or []) != list(wanted["selectors"]):
+        reasons.append("selectors")
+    if not _floats_close(
+        sidecar.get("bbox_requested_south_west_north_east"),
+        wanted["bbox_requested_south_west_north_east"],
+    ):
+        reasons.append("bbox_requested")
+    try:
+        buf = float(sidecar.get("buffer_m"))
+    except (TypeError, ValueError):
+        buf = None
+    if buf is None or abs(buf - float(wanted["buffer_m"])) > 1e-6:
+        reasons.append("buffer_m")
+    if sidecar.get("date_pinned") != wanted["date_pinned"]:
+        reasons.append("date_pinned")
+    return reasons
+
+
 def fetch_stage(repo: Path, area: str, force: bool) -> tuple[dict, dict, str, str]:
     raw_dir = repo / "data" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -515,16 +586,26 @@ def fetch_stage(repo: Path, area: str, force: bool) -> tuple[dict, dict, str, st
     fetch_path = repo / fetch_rel
     osm_path = repo / osm_rel
 
-    if geojson_path.is_file() and fetch_path.is_file() and not force:
-        geojson = json.loads(geojson_path.read_text(encoding="utf-8"))
-        sidecar = json.loads(fetch_path.read_text(encoding="utf-8"))
-        print(f"fetch: cache hit {geojson_rel} ({sidecar.get('element_count')} elements)")
-        return geojson, sidecar, geojson_rel, fetch_rel
-
     bbox_req = load_area_bbox(repo, area)
     south, west, north, east = [float(v) for v in bbox_req]
     bbox_fetch = buffer_bbox(south, west, north, east, BUFFER_M)
     query = build_query(bbox_fetch, TIMEOUT_S, DATE_PINNED)
+    wanted = {
+        "selectors": list(SELECTORS),
+        "bbox_requested_south_west_north_east": [south, west, north, east],
+        "buffer_m": BUFFER_M,
+        "date_pinned": DATE_PINNED,
+    }
+
+    if geojson_path.is_file() and fetch_path.is_file() and not force:
+        sidecar = json.loads(fetch_path.read_text(encoding="utf-8"))
+        mismatches = cache_mismatches(sidecar, wanted)
+        if not mismatches:
+            geojson = json.loads(geojson_path.read_text(encoding="utf-8"))
+            print(f"fetch: cache hit {geojson_rel} ({sidecar.get('element_count')} elements)")
+            return geojson, sidecar, geojson_rel, fetch_rel
+        print(f"fetch: cache stale ({', '.join(mismatches)}); re-downloading")
+
     print(f"fetch: downloading {area} from Overpass (buffer {BUFFER_M} m, date {DATE_PINNED})")
     payload, endpoint = download_overpass(query)
     geojson, convert_skip = overpass_to_geojson(payload)
@@ -582,14 +663,44 @@ def polygon_hole_count(geom: dict) -> int:
     return 0
 
 
-def is_below_grade(rec: dict) -> bool:
-    if rec.get("indoor") == "yes":
-        return True
-    tunnel = rec.get("tunnel")
+def parse_level_n(raw) -> float | None:
+    """First numeric token of OSM level=* (may be '-1' or '-1;0')."""
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(",", ".")
+    if not text:
+        return None
+    token = text.split(";")[0].strip()
+    try:
+        return float(token)
+    except ValueError:
+        return None
+
+
+def below_grade_reason(props: dict) -> str | None:
+    """One test for every class. First match wins. None means at grade."""
+    loc = props.get("location")
+    if loc == "underground":
+        return "location=underground"
+    layer_n = parse_number(props.get("layer"))
+    if layer_n is not None and layer_n < 0:
+        return "layer<0"
+    tunnel = props.get("tunnel")
     if tunnel and tunnel != "no":
-        return True
-    layer_n = rec.get("layer_n")
-    return layer_n is not None and layer_n < 0
+        return "tunnel"
+    if props.get("indoor") == "yes":
+        return "indoor=yes"
+    level_n = parse_level_n(props.get("level"))
+    if level_n is not None and level_n < 0:
+        return "level<0"
+    return None
+
+
+def is_below_grade(rec: dict) -> bool:
+    props = rec.get("props")
+    if not isinstance(props, dict):
+        props = rec
+    return below_grade_reason(props) is not None
 
 
 def classify_highways(roads: list) -> dict:
@@ -626,10 +737,87 @@ def classify_highways(roads: list) -> dict:
     return dict(sorted(buckets.items(), key=lambda kv: kv[0]))
 
 
+def classify_ground_class(props: dict) -> str | None:
+    """Most specific surface class. Used for Z and for the report."""
+    leisure = props.get("leisure")
+    landuse = props.get("landuse")
+    natural = props.get("natural")
+    amenity = props.get("amenity")
+    water = props.get("water")
+    waterway = props.get("waterway")
+    if natural == "water" or water or waterway in {"riverbank", "dock", "basin"}:
+        return "water"
+    if amenity == "fountain":
+        return "water"
+    if landuse == "flowerbed" or leisure == "garden" and landuse == "flowerbed":
+        return "flowerbed"
+    if landuse == "flowerbed":
+        return "flowerbed"
+    if leisure == "pitch":
+        return "pitch"
+    if leisure == "playground":
+        return "playground"
+    if natural == "sand":
+        return "sand"
+    if leisure == "park":
+        return "park"
+    if leisure == "garden":
+        return "garden"
+    if amenity == "parking":
+        return "parking"
+    if landuse in DISTRICT_LANDUSE:
+        return None
+    if landuse:
+        return "landuse"
+    if leisure:
+        return "park"
+    if natural:
+        return None
+    return None
+
+
+def ground_cover_record(props: dict, geom: dict, gtype: str, project_cm):
+    klass = classify_ground_class(props)
+    if klass is None:
+        return None
+    outers = polygon_outers(geom)
+    if not outers:
+        return {
+            "props": props,
+            "osm_id": props.get("osm_id"),
+            "osm_type": props.get("osm_type"),
+            "klass": klass,
+            "gtype": gtype,
+            "ring_xy": None,
+            "coords_ll": geom.get("coordinates") if gtype == "LineString" else None,
+            "below_reason": below_grade_reason(props),
+            "linear": True,
+        }
+    rings_xy = [[project_cm(lon, lat) for lon, lat in outer] for outer in outers]
+    ring = max(rings_xy, key=lambda r: abs(signed_area(r)))
+    return {
+        "props": props,
+        "osm_id": props.get("osm_id"),
+        "osm_type": props.get("osm_type"),
+        "klass": klass,
+        "gtype": gtype,
+        "ring_xy": ring,
+        "holes": polygon_hole_count(geom),
+        "below_reason": below_grade_reason(props),
+        "linear": False,
+        "leisure": props.get("leisure"),
+        "landuse": props.get("landuse"),
+        "natural": props.get("natural"),
+    }
+
+
 def inspect_and_index(features: list, project_cm) -> dict:
     buildings = []
     parts = []
     roads = []
+    ground = []
+    rails = []
+    district_landuse = 0
     other = 0
     holes = 0
     ring_issue = Counter()
@@ -692,6 +880,7 @@ def inspect_and_index(features: list, project_cm) -> dict:
                 "is_parent": has_b,
                 "is_part": has_p and not has_b,
                 "holes": polygon_hole_count(geom),
+                "below_reason": below_grade_reason(props),
             }
             if rec["is_part"]:
                 parts.append(rec)
@@ -713,12 +902,41 @@ def inspect_and_index(features: list, project_cm) -> dict:
                 "bridge": props.get("bridge"),
                 "tunnel": props.get("tunnel"),
                 "indoor": props.get("indoor"),
+                "location": props.get("location"),
+                "level": props.get("level"),
                 "footway": props.get("footway"),
                 "area_yes": props.get("area") == "yes" or gtype in ("Polygon", "MultiPolygon"),
                 "coords_ll": geom.get("coordinates") if gtype == "LineString" else None,
                 "poly_ll": geom.get("coordinates") if gtype in ("Polygon", "MultiPolygon") else None,
             }
             roads.append(rec)
+        elif (
+            props.get("leisure")
+            or props.get("landuse")
+            or props.get("natural")
+            or props.get("water")
+            or props.get("waterway")
+            or props.get("amenity") == "parking"
+        ):
+            rec = ground_cover_record(props, geom, gtype, project_cm)
+            if rec is not None:
+                ground.append(rec)
+            elif props.get("landuse") in DISTRICT_LANDUSE:
+                district_landuse += 1
+            else:
+                other += 1
+        elif props.get("railway"):
+            rec = {
+                "props": props,
+                "osm_id": props.get("osm_id"),
+                "osm_type": props.get("osm_type"),
+                "railway": props.get("railway"),
+                "gtype": gtype,
+                "coords_ll": geom.get("coordinates") if gtype == "LineString" else None,
+                "poly_ll": geom.get("coordinates") if gtype in ("Polygon", "MultiPolygon") else None,
+                "below_reason": below_grade_reason(props),
+            }
+            rails.append(rec)
         else:
             other += 1
 
@@ -730,8 +948,10 @@ def inspect_and_index(features: list, project_cm) -> dict:
     n_ph = sum(1 for p in parts if p["height_m"] is not None)
     driveable = [r for r in roads if r["highway"] in DRIVEABLE and not r["area_yes"]]
     subsets = classify_highways(roads)
+    below_b = [b for b in buildings if b.get("below_reason")]
+    below_p = [p for p in parts if p.get("below_reason")]
     print("=== INSPECT ===")
-    print(f"features {len(features)} buildings {n_b} parts {len(parts)} roads {len(roads)} other {other}")
+    print(f"features {len(features)} buildings {n_b} parts {len(parts)} roads {len(roads)} ground {len(ground)} railway {len(rails)} other {other}")
     frac = (100.0 * n_h / n_b) if n_b else 0.0
     print(f"parent height tags {n_h}/{n_b} = {frac:.1f}%  (expect ~84-85%)")
     print(f"parent levels {n_l} both {n_both} neither {n_neither}")
@@ -748,6 +968,20 @@ def inspect_and_index(features: list, project_cm) -> dict:
     print("highway subsets:")
     for name, group in subsets.items():
         print(f"  {name}: {len(group)}")
+    print("=== BELOW GRADE ===")
+    print(f"buildings {len(below_b)}: " + ", ".join(
+        f"{b.get('osm_type')}/{b.get('osm_id')} {b.get('btype')} {b.get('below_reason')} area={b.get('area_m2'):.0f}m2"
+        for b in below_b
+    ) if below_b else "buildings 0")
+    print(f"parts {len(below_p)}")
+    print(f"highways below-grade bucket {len(subsets.get('below_grade') or [])}")
+    print(f"railway {Counter(r['railway'] for r in rails)} below {sum(1 for r in rails if r.get('below_reason'))}")
+    print("=== GROUND COVER ===")
+    print(f"leisure {Counter(g['props'].get('leisure') for g in ground if g['props'].get('leisure'))}")
+    print(f"landuse {Counter(g['props'].get('landuse') for g in ground if g['props'].get('landuse'))}")
+    print(f"natural {Counter(g['props'].get('natural') for g in ground if g['props'].get('natural'))}")
+    print(f"klass {Counter(g['klass'] for g in ground)} linear {sum(1 for g in ground if g.get('linear'))}")
+    print(f"district-scale landuse skipped {district_landuse}")
     print(f"top keys {key_counts.most_common(20)}")
     print(f"height formats {dict(height_formats)}")
     if n_b and frac < 70.0:
@@ -761,12 +995,17 @@ def inspect_and_index(features: list, project_cm) -> dict:
         "roads": roads,
         "driveable": driveable,
         "subsets": subsets,
+        "ground": ground,
+        "rails": rails,
         "n_parent_height": n_h,
         "n_parent": n_b,
         "parent_height_frac": frac,
         "holes": holes,
         "ring_issue": dict(ring_issue),
         "key_counts": key_counts,
+        "below_grade_buildings": below_b,
+        "below_grade_parts": below_p,
+        "district_landuse_skipped": district_landuse,
     }
 
 
@@ -1564,7 +1803,39 @@ def _sorted_recs(recs: list) -> list:
     return sorted(recs, key=lambda r: (r.get("osm_type") or "", r.get("osm_id") or 0))
 
 
+def polyline_outline(points: list, width_cm: float) -> list | None:
+    """Closed kerb-to-kerb ring for a centreline strip, used as an extrude outline."""
+    if len(points) < 2 or width_cm <= 0:
+        return None
+    half = width_cm / 2.0
+    left = []
+    right = []
+    n = len(points)
+    for i in range(n):
+        if i == 0:
+            dx = points[1][0] - points[0][0]
+            dy = points[1][1] - points[0][1]
+        elif i == n - 1:
+            dx = points[-1][0] - points[-2][0]
+            dy = points[-1][1] - points[-2][1]
+        else:
+            dx1 = points[i][0] - points[i - 1][0]
+            dy1 = points[i][1] - points[i - 1][1]
+            dx2 = points[i + 1][0] - points[i][0]
+            dy2 = points[i + 1][1] - points[i][1]
+            l1 = math.hypot(dx1, dy1) or 1.0
+            l2 = math.hypot(dx2, dy2) or 1.0
+            dx = dx1 / l1 + dx2 / l2
+            dy = dy1 / l1 + dy2 / l2
+        length = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / length * half, dx / length * half
+        left.append([points[i][0] + nx, points[i][1] + ny])
+        right.append([points[i][0] - nx, points[i][1] - ny])
+    return left + list(reversed(right))
+
+
 def emit_pedestrian_strips(recs, project_cm, width_m, width_src, z_cm, tag, prefix, skipped):
+    """Curb prism: extrude from the slab (0) up to z_cm so the face is a kerb."""
     nodes = []
     for rec in _sorted_recs(recs):
         coords = rec.get("coords_ll") or []
@@ -1572,20 +1843,31 @@ def emit_pedestrian_strips(recs, project_cm, width_m, width_src, z_cm, tag, pref
         if len(points) < 2:
             skipped[f"{tag}_collapsed"] += 1
             continue
-        node = polyline_strip_mesh(
-            points,
-            rcm(width_m * CM_PER_M),
-            z_cm,
-            f"{prefix}/{rec['osm_id']}",
+        outline = polyline_outline(points, width_m * CM_PER_M)
+        if outline is None:
+            skipped[f"{tag}_outline_failed"] += 1
+            continue
+        if ring_problems(outline):
+            skipped[f"{tag}_bad_ring"] += 1
+            continue
+        node = emit_extrude(
+            rec,
+            outline,
+            0,
+            int(z_cm),
             [tag, rec["highway"]],
             {
+                "height_source": f"curb:{int(z_cm)}cm",
                 "width_source": width_src,
                 "osm_id": rec["osm_id"],
-                "z_cm": z_cm,
+                "z_cm": int(z_cm),
             },
+            f"{prefix}/{rec['osm_id']}",
         )
         if node is None:
-            skipped[f"{tag}_mesh_failed"] += 1
+            skipped[f"{tag}_extrude_failed"] += 1
+        elif ring_problems(node["outline"]):
+            skipped[f"{tag}_bad_ring"] += 1
         else:
             nodes.append(node)
     return nodes
@@ -1611,19 +1893,25 @@ def emit_plazas(recs, project_cm, skipped):
             ([project_cm(lon, lat) for lon, lat in outer] for outer in outers),
             key=lambda r: abs(signed_area(r)),
         )
-        node = polygon_mesh(
+        if ring_problems(ring_xy):
+            skipped["plaza_bad_ring"] += 1
+            continue
+        node = emit_extrude(
+            rec,
             ring_xy,
+            0,
             PLAZA_Z_CM,
-            f"a/{rec['osm_id']}",
             ["plaza", rec["highway"]],
             {
+                "height_source": f"plaza:{PLAZA_Z_CM}cm",
                 "width_source": "area_polygon",
                 "osm_id": rec["osm_id"],
                 "z_cm": PLAZA_Z_CM,
             },
+            f"a/{rec['osm_id']}",
         )
         if node is None:
-            skipped["plaza_mesh_failed"] += 1
+            skipped["plaza_extrude_failed"] += 1
         else:
             nodes.append(node)
     return nodes
@@ -1772,6 +2060,95 @@ def emit_street_network(inventory: dict, fits: dict, skipped: Counter, width_sou
     return nodes, report
 
 
+def emit_ground_cover(inventory: dict, skipped: Counter) -> tuple[list, dict]:
+    nodes = []
+    emitted = Counter()
+    excluded = Counter()
+    z_used = {}
+    for rec in _sorted_recs(inventory.get("ground") or []):
+        if rec.get("below_reason"):
+            excluded[f"ground_{rec['klass']}_{rec['below_reason']}"] += 1
+            skipped[f"ground_below_grade_{rec['below_reason']}"] += 1
+            continue
+        if rec.get("linear") or not rec.get("ring_xy"):
+            skipped[f"ground_{rec['klass']}_not_a_polygon"] += 1
+            excluded[f"ground_{rec['klass']}_linear"] += 1
+            continue
+        if rec.get("holes"):
+            skipped["ground_interior_ring_ignored"] += rec["holes"]
+        if ring_problems(rec["ring_xy"]):
+            skipped[f"ground_{rec['klass']}_bad_ring"] += 1
+            continue
+        z_cm = int(GROUND_Z_CM[rec["klass"]])
+        if z_cm <= 0 or z_cm >= 4:
+            skipped[f"ground_{rec['klass']}_z_out_of_band"] += 1
+            continue
+        node = polygon_mesh(
+            rec["ring_xy"],
+            z_cm,
+            f"g/{rec['osm_id']}",
+            ["ground", rec["klass"]],
+            {
+                "osm_id": rec["osm_id"],
+                "z_cm": z_cm,
+                "ground_class": rec["klass"],
+            },
+        )
+        if node is None:
+            skipped[f"ground_{rec['klass']}_mesh_failed"] += 1
+            continue
+        nodes.append(node)
+        emitted[rec["klass"]] += 1
+        z_used[rec["klass"]] = z_cm
+
+    rail_emitted = 0
+    for rec in _sorted_recs(inventory.get("rails") or []):
+        reason = rec.get("below_reason")
+        if rec.get("railway") == "subway" and not reason:
+            reason = "railway=subway"
+        if reason:
+            skipped[f"railway_{reason}"] += 1
+            excluded[f"railway_{rec.get('railway')}_{reason}"] += 1
+            continue
+        coords = rec.get("coords_ll") or []
+        if rec.get("gtype") != "LineString" or len(coords) < 2:
+            skipped["railway_not_a_line"] += 1
+            excluded[f"railway_{rec.get('railway')}_not_line"] += 1
+            continue
+        project_cm = inventory["project_cm"]
+        points = project_line(coords, project_cm)
+        if len(points) < 2:
+            skipped["railway_collapsed"] += 1
+            continue
+        nodes.append(
+            {
+                "id": f"t/{rec['osm_id']}",
+                "kind": "ribbon",
+                "points": points,
+                "width_cm": rcm(1.435 * CM_PER_M),
+                "tags": ["railway", rec["railway"]],
+                "attrs": {
+                    "width_source": "standard_gauge:1.435m",
+                    "osm_id": rec["osm_id"],
+                    "layer": 0,
+                },
+            }
+        )
+        rail_emitted += 1
+
+    report = {
+        "emitted": dict(emitted),
+        "excluded": dict(excluded),
+        "z_cm": dict(sorted(z_used.items())),
+        "railway_at_grade": rail_emitted,
+        "blocks": "not derived; this extract does not tag city blocks",
+    }
+    print("=== GROUND COVER EMIT ===")
+    for key in sorted(report):
+        print(f"  {key}: {report[key]}")
+    return nodes, report
+
+
 def build_scene(inventory: dict, fits: dict, sidecar: dict, area: str, geojson_rel: str) -> dict:
     skipped = Counter()
     nodes = []
@@ -1785,6 +2162,9 @@ def build_scene(inventory: dict, fits: dict, sidecar: dict, area: str, geojson_r
 
     def handle_volume(rec: dict, kind_tag: str, prefix: str):
         nonlocal parents_replaced
+        if rec.get("below_reason"):
+            skipped[f"below_grade_{kind_tag}_{rec['below_reason']}"] += 1
+            return
         if kind_tag == "building" and rec.get("child_parts"):
             skipped["parent_replaced_by_parts"] += 1
             parents_replaced += 1
@@ -1866,6 +2246,10 @@ def build_scene(inventory: dict, fits: dict, sidecar: dict, area: str, geojson_r
 
     street_nodes, street_report = emit_street_network(inventory, fits, skipped, width_sources)
     nodes.extend(street_nodes)
+    cover_nodes, cover_report = emit_ground_cover(inventory, skipped)
+    nodes.extend(cover_nodes)
+    if inventory.get("district_landuse_skipped"):
+        skipped["district_scale_landuse"] += inventory["district_landuse_skipped"]
 
     nodes.sort(key=lambda n: (n["kind"], n["id"]))
     counts = {
@@ -1922,6 +2306,20 @@ def build_scene(inventory: dict, fits: dict, sidecar: dict, area: str, geojson_r
         },
         "driveable_classes": sorted(DRIVEABLE),
         "pedestrian_z_cm": {"curb": CURB_Z_CM, "plaza": PLAZA_Z_CM},
+        "ground_cover_z_cm": dict(sorted(GROUND_Z_CM.items())),
+        "ground_cover": cover_report,
+        "below_grade_test": "location=underground | layer<0 | tunnel=* | indoor=yes | level<0",
+        "below_grade_buildings": [
+            {
+                "osm_type": b.get("osm_type"),
+                "osm_id": b.get("osm_id"),
+                "reason": b.get("below_reason"),
+                "building": b.get("btype"),
+                "area_m2": round(b.get("area_m2") or 0.0, 1),
+            }
+            for b in inventory.get("below_grade_buildings") or []
+        ],
+        "city_blocks": "not derived; this extract does not tag blocks",
         "junctions": {
             "method": "merge same-section runs, then trim-and-cap shared endpoints",
             "resolved": street_report.get("junctions_resolved"),
@@ -1965,23 +2363,49 @@ def build_scene(inventory: dict, fits: dict, sidecar: dict, area: str, geojson_r
         "parents_replaced_by_parts": parents_replaced,
     }
     print("=== PROVENANCE HISTOGRAM ===")
-    total_h = sum(height_sources.values()) or 1
-    for key, n in height_sources.most_common():
+    building_nodes = [
+        n
+        for n in nodes
+        if n["kind"] == "extrude" and set(n.get("tags") or []) & {"building", "building:part"}
+    ]
+    bsrc = Counter((n.get("attrs") or {}).get("height_source", "(none)") for n in building_nodes)
+    total_h = sum(bsrc.values()) or 1
+    for key, n in bsrc.most_common():
         print(f"  height {key}: {n} ({100.0 * n / total_h:.1f}%)")
-    tag_n = sum(n for k, n in height_sources.items() if k == "tag:height")
+    tag_n = sum(n for k, n in bsrc.items() if k == "tag:height")
     print(
-        f"tag:height {tag_n}/{total_h} = {100.0 * tag_n / total_h:.1f}% of extrudes "
+        f"tag:height {tag_n}/{total_h} = {100.0 * tag_n / total_h:.1f}% of building extrudes "
         f"(parent tag coverage was {inventory['parent_height_frac']:.1f}%; "
-        f"parts are 99.5% tagged so emit share should stay high)"
+        f"parts are ~99.5% tagged so emit share should stay high)"
     )
     if tag_n / total_h < 0.70:
         raise SystemExit(
-            "provenance sanity failed: almost no tag:height on emitted volumes"
+            "provenance sanity failed: almost no tag:height on emitted building volumes"
         )
+    print(f"all extrude height_source {dict(height_sources)}")
     print(f"width sources {dict(width_sources)}")
     print(f"roofs emitted {dict(roof_shapes_emitted)} skipped {dict(roof_shapes_skipped)}")
     print(f"skipped {dict(skipped)}")
     print(f"counts {counts}")
+    ns_m, ew_m = scene_extent_m(nodes)
+    req_ns = vincenty_m(origin_lon, south, origin_lon, north)
+    req_ew = vincenty_m(west, origin_lat, east, origin_lat)
+    print(
+        f"emitted extent {ns_m:.1f} x {ew_m:.1f} m (NS x EW) vs requested bbox "
+        f"{req_ns:.1f} x {req_ew:.1f} m"
+    )
+    if ns_m > req_ns * 2.5 or ew_m > req_ew * 2.5:
+        print(
+            "WARNING: emitted extent is much larger than the requested bbox; "
+            "a below-grade station may have leaked through"
+        )
+    manifest["extent_m"] = {
+        "emitted_ns": round(ns_m, 2),
+        "emitted_ew": round(ew_m, 2),
+        "requested_ns": round(req_ns, 2),
+        "requested_ew": round(req_ew, 2),
+    }
+    manifest["provenance"]["height_source"] = dict(sorted(bsrc.items()))
     return {"manifest": manifest, "nodes": nodes}
 
 
@@ -1989,6 +2413,28 @@ def dump_scene(path: Path, scene: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(scene, sort_keys=True, indent=2, ensure_ascii=True) + "\n"
     path.write_text(text, encoding="utf-8")
+
+
+def scene_extent_m(nodes: list) -> tuple[float, float]:
+    xs: list[float] = []
+    ys: list[float] = []
+    for node in nodes:
+        kind = node.get("kind")
+        if kind == "extrude":
+            for x, y in node.get("outline") or []:
+                xs.append(float(x))
+                ys.append(float(y))
+        elif kind == "mesh":
+            for vert in node.get("vertices") or []:
+                xs.append(float(vert[0]))
+                ys.append(float(vert[1]))
+        elif kind == "ribbon":
+            for x, y in node.get("points") or []:
+                xs.append(float(x))
+                ys.append(float(y))
+    if not xs:
+        return 0.0, 0.0
+    return (max(xs) - min(xs)) / CM_PER_M, (max(ys) - min(ys)) / CM_PER_M
 
 
 # ---------------------------------------------------------------------------
@@ -2107,6 +2553,35 @@ def self_check(scene: dict, sidecar: dict, scene_text: str) -> None:
         fail(failures, "below_grade_uncounted", "below-grade pedestrian ways were not counted")
     if "crossing_on_carriageway" not in skipped:
         fail(failures, "crossings_uncounted", "crossings were not counted")
+    if not any(k.startswith("below_grade_building") for k in skipped):
+        fail(failures, "below_grade_buildings_uncounted", "below-grade buildings were not counted")
+    cover = (manifest.get("assumptions") or {}).get("ground_cover") or {}
+    z_table = cover.get("z_cm") or (manifest.get("assumptions") or {}).get("ground_cover_z_cm") or {}
+    for klass, z_cm in z_table.items():
+        if float(z_cm) <= 0 or float(z_cm) >= 4:
+            fail(failures, "ground_z_band", f"{klass} at Z={z_cm} is not in (0, 4) cm")
+    if not cover.get("emitted"):
+        fail(failures, "ground_cover_missing", "no ground-cover polygons were emitted")
+    huge_buildings = []
+    for n in extrudes:
+        tags = set(n.get("tags") or [])
+        if not tags & {"building", "building:part"}:
+            continue
+        ring = n.get("outline") or []
+        if len(ring) < 3:
+            continue
+        xs = [p[0] for p in ring]
+        ys = [p[1] for p in ring]
+        span_m = max(max(xs) - min(xs), max(ys) - min(ys)) / CM_PER_M
+        if span_m > 400:
+            huge_buildings.append(f"{n['id']} {span_m:.0f}m")
+    if huge_buildings:
+        fail(
+            failures,
+            "huge_building",
+            "building span > 400 m (likely a below-grade station at grade): "
+            + ", ".join(huge_buildings[:5]),
+        )
 
     if failures:
         print("VERIFY FAILED")

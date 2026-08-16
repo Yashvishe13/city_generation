@@ -93,8 +93,8 @@ Preference order, with every result carrying its provenance in the node's `attrs
 
 | source                             | volumes | share     |
 | ---------------------------------- | ------- | --------- |
-| `tag:height` — stated by OSM       | 1,608   | **97.4%** |
-| `knn[...]` — fitted from this area | 35      | 2.1%      |
+| `tag:height` — stated by OSM | 1,608 | **97.6%** |
+| `knn[...]` — fitted from this area | 32 | 1.9% |
 | `building:levels × 3.883 m`        | 5       | 0.3%      |
 | `area_median:26.25m`               | 3       | 0.2%      |
 
@@ -116,7 +116,7 @@ at `height − roof:height`. 114 roof meshes for 115 non-flat `roof:shape` value
 - **Nothing is dropped for lacking a height.** A footprint with an honestly-labelled
 estimate beats a hole in the city.
 
-Resulting distribution: median **45.2 m**, 90th percentile 105 m, max **397 m** (the Empire
+Resulting distribution: median **45.1 m**, 90th percentile 105 m, max **397 m** (the Empire
 State Building's roof — correctly excluding its 443 m antenna, which is a separate part).
 
 Road widths could not be fitted at all: **no driveable way in this extract states** `width`.
@@ -134,8 +134,8 @@ geometric primitives:
 
 | kind      | geometry                                  | used for                            |
 | --------- | ----------------------------------------- | ----------------------------------- |
-| `extrude` | closed CCW ring + `base_cm` + `height_cm` | building volumes, any prism         |
-| `mesh`    | indexed triangles, absolute coordinates   | roofs, plazas, sidewalks, junctions |
+| `extrude` | closed CCW ring + `base_cm` + `height_cm` | building volumes; also sidewalks, plazas and islands as curb prisms |
+| `mesh` | indexed triangles, absolute coordinates | roofs, junction caps, ground cover |
 | `ribbon`  | polyline + `width_cm`                     | road carriageways                   |
 
 
@@ -161,8 +161,8 @@ path; both call `UOSMCityGeometry`, so the two cannot drift.
 Confirmed in the editor:
 
 ```
-LogOSMCity:    loaded 'nyc_midtown': 1651 extrude, 864 mesh, 173 ribbon (0 skipped)
-LogPCGOSMCity: OSM City Source: area 'nyc_midtown' -> 1651 extruded, 5028 triangles,
+LogOSMCity:    loaded 'nyc_midtown': 2294 extrude, 344 mesh, 173 ribbon (0 skipped)
+LogPCGOSMCity: OSM City Source: area 'nyc_midtown' -> 2294 extruded, 1781 triangles,
                173 ribbons, 173 splines
 ```
 
@@ -231,109 +231,89 @@ tools/crop_overhead.py --area nyc_midtown       # crop to the bbox, match the pa
 118.6°, a 0.5° delta on Manhattan's ~29°-east-of-north grid. Put the two overheads side by
 side and the block pattern registers.
 
-**Footprints are faithful.** 1,651 volumes from 1,779 source building features (93%; the
-difference is the 120 deliberately-suppressed parents). All rings counter-clockwise, no
+**Footprints are faithful.** 1,648 volumes from 1,779 source building features (93%; the
+difference is the 120 deliberately-suppressed parents and 3 underground stations). All rings counter-clockwise, no
 self-intersections, no degenerate rings, and the source extract had none to repair.
 
-**Heights are data, not decoration.** 97.4% come straight from `height`. The skyline is
+**Heights are data, not decoration.** 97.6% come straight from `height`. The skyline is
 right because Midtown states it, not because it was modelled — and where it doesn't, the
 estimator was validated against a baseline before shipping, and refused to fit lane widths
 at all rather than invent them.
 
 **The street network is a network, not a set of centrelines.** 173 carriageway ribbons with
 17 distinct widths composed from the real cross-section, 87 junctions resolved by trimming
-and capping, 453 mapped sidewalks, 59 plaza surfaces, 24 traffic islands — while the 88
-below-grade subway passages and indoor concourses stay correctly excluded.
+and capping, and a pedestrian realm built as **curb prisms rather than floating plates** —
+444 sidewalks, 59 plazas and 24 traffic islands, each an `extrude` from `base_cm: 0` to a
+16–19 cm top, so they have a curb face and sit on the ground instead of hovering over it.
+
+**The ground is ground, and the underground stays under it.** 143 ground-cover surfaces —
+106 gardens, 17 flowerbeds, 6 parks, 6 sand, 3 pitches, 2 playgrounds, 1 water — stacked a
+centimetre apart between the slab and the carriageway, so Bryant Park reads as a park rather
+than as the footways crossing it. Meanwhile one test (`location=underground`, `layer<0`,
+`tunnel`, `indoor`, `level<0`) keeps 3 station buildings, 124 railway ways and 103 indoor
+and tunnel footways out of the street level — including Grand Central's underground
+concourse, while keeping the terminal building above it.
 
 **It reproduces.** Same input → byte-identical output, verified. One command from nothing:
 fetch, translate, verify.
 
 ### Known limitations
 
-**Three underground subway complexes are extruded as above-ground buildings, and they
-inflate the scene to ~6× the requested area.** This is the biggest defect.
+**The scene still overruns its bounding box, now for a much smaller reason.** It spans
+1,438 x 1,245 m against a 611 x 591 m request. The cause is no longer three underground
+station complexes standing on the street — those are excluded now, and the largest building
+in the scene is 154 m across rather than 737 m. What remains is Overpass returning any
+intersecting way in full, so long through-streets run out past the boundary at their true
+length. Boundary features arriving complete is what the fetch buffer is for; a footprint cut
+in half is a worse error than a margin. The emitted extent is recorded next to the requested
+bbox so the difference is visible rather than surprising.
 
-OSM tags New York's station complexes as buildings:
-
-```
-relation/11171793  Grand Central Terminal                     737 × 494 m
-relation/11171765  Times Square–42nd St / Port Authority      556 × 435 m
-way/812938420      34th Street–Herald Square                  382 × 220 m
-
-  building = train_station     location = underground     layer = -1 / -2
-```
-
-All three are currently built as solid volumes standing on the street. They are also
-enormous — an underground concourse spans several city blocks — so they alone drive the
-building extent from 1,078 × 1,057 m to **1,259 × 1,565 m**, against a 611 × 591 m
-request. Three features out of 1,779.
-
-The pipeline is not inventing this and it is not fetching the wrong area: it reads the
-correct bbox from `data/areas.json`, and the extent of what it emits matches the extent of
-what Overpass returned **to the metre** (1,438 × 1,567 m both). It faithfully translates a
-response that contains three very large things that should never have been above ground.
-
-The rule to fix it already exists elsewhere in this project — `layer`, `tunnel` and
-`location` are checked to exclude 88 indoor/tunnel footways and 58 `railway=subway` ways —
-it is simply **missing on the buildings path**. A below-grade building is not a volume.
-
-Deferred deliberately: the correct treatment of subway infrastructure is its own piece of
-work (stations, platforms and passages are a coherent underground layer, not noise to
-discard), and it is scheduled rather than patched. Until then the extent overrun is a
-known and understood consequence, not an unexplained one.
-
-Ordinary boundary overrun is a separate and much smaller effect. Overpass returns any way
-that *intersects* the query box in full, so a 150 m buffer does not produce a 150 m margin.
-That is inherent to the API — `out geom(bbox)` clips server-side but only filters existing
-vertices, so it cannot cut a segment at the boundary either, and applied to buildings it
-would truncate footprints into broken rings. Keeping boundary buildings whole is the
-correct behaviour and costs roughly one building of margin.
-
-**Raised pedestrian surfaces are flat plates, not prisms.** Sidewalks sit at Z = +19 cm and
-plazas at +16 cm with every vertex at a single height, so they have a walking surface but
-no curb face and nothing underneath. Correct from altitude, wrong at street level. They
-should be `extrude` nodes with `base_cm: 0` — the primitive already supports it.
-
-**There is no ground cover.** The fetch selectors cover buildings and highways only, so
-parks, water, landuse and grass are simply absent. Bryant Park appears as *the footways
-crossing it* over a bare slab, with no lawn. The ground is a single flat box spanning the
-scene; there are no blocks or parcels.
+**Nine sidewalks were dropped as bad rings.** Turning a sidewalk centreline into a curb
+prism means offsetting the polyline both ways into a closed ring, and after rounding to
+whole centimetres nine of 453 came out self-intersecting and were discarded with a counted
+reason rather than emitted as tangled solids. 444 survive. A proper offset with mitred
+joins would recover them.
 
 **Deliberate omissions**, each counted in the manifest with its reason: 241 pedestrian
-crossings (they lie *on* the carriageway by definition and would z-fight it), 58 at-grade
-steps (a stair is not a flat strip), 5 elevators, 5 interior rings — so five courtyards are
-filled in — 2 service parking pads, and 1 mansard roof whose `roof:height` is missing.
+crossings (they lie *on* the carriageway by definition and would z-fight it), 103 indoor,
+tunnel and below-grade footways, 124 below-grade railway ways, 3 below-grade station
+buildings, 51 at-grade steps (a stair is not a flat strip), 16 fountain rims that are lines
+rather than polygons, 5 elevators, 3 interior rings — so three courtyards are filled — 2
+service parking pads, and 1 mansard roof whose `roof:height` is missing.
+
+**Twelve district-scale landuse polygons were skipped**, two of them 700–900 m across.
+They are `landuse=commercial`, `construction` and `brownfield` covering whole districts, not
+city blocks, and laying them over the ground would have painted the entire area one colour.
+Which leaves the honest gap: **there are still no blocks or parcels.** A city block is not
+an OSM object — this extract has three `landuse=commercial` polygons for dozens of blocks —
+so blocks would have to be derived as faces of the road graph, and that is not done.
 
 **Sidewalk width is borrowed, and it is doing a lot of work.** Not one sidewalk in the
-extract states `width`, so all 453 use NYCDOT's 4.57 m commercial figure. That puts the
-pedestrian surface at 1.07× the carriageway area — plausible for Midtown, but it is the
-single assumption a reviewer should push on hardest. It is at least labelled as borrowed.
+extract states `width`, so all 444 use NYCDOT's 4.57 m commercial figure. It is the single
+assumption a reviewer should push on hardest. It is at least labelled as borrowed rather
+than presented as a local fit.
 
 **Materials are untextured grey-box** (not part of the brief), and the `RoadSplines` output
 is emitted but unconsumed — the road pass is ribbons, not spline meshes.
 
 ### What I would improve with more time, in priority order
 
-1. **Subway infrastructure as its own layer.** Exclude below-grade buildings from the
-  street-level massing (the same `layer`/`location` test already used for footways and
-   railways), then decide what an underground network should actually look like — station
-   volumes, platforms and passages at their stated `layer`, rather than either standing on
-   the street or vanishing. Fixes the extent overrun as a side effect rather than as a
-   trim.
-2. **Curbs as prisms.** A one-primitive change from `mesh` to `extrude` that fixes every
-  raised pedestrian surface at street level.
-3. **Ground cover** — add `leisure`, `landuse`, `natural`, `water` to the selectors and
-  stack them in the 0–4 cm band beneath the carriageway, excluding the 58 below-grade
-   `railway=subway` ways. Bryant Park becomes a park.
-4. **Blocks from the road graph.** A city block is not an OSM object — this extract has
-  three `landuse=commercial` polygons for dozens of blocks — so they would have to be
-   derived as faces of the road network, inset by half the adjacent street widths.
-5. **Spline-mesh roads** off the `RoadSplines` pin, with lane markings, which is what the
-  pin was left connected-ready for.
-6. **A height-fidelity metric.** The verifier currently checks that heights come from real
-  tags; it does not measure *error*. Holding out stated heights and scoring the estimator
-   against them per-area would turn "plausible" into a number.
-
+1. **Blocks from the road graph.** The one structural thing still missing. The road
+   centrelines form a planar graph and a block is a face of it, inset by half the adjacent
+   street widths. Nothing in OSM will hand this over.
+2. **Model the underground rather than only excluding it.** 3 station buildings, 124 railway
+   ways and 103 footways are correctly kept out of the street level, but they describe a
+   real network — stations, platforms and passages at their stated `layer` — which is
+   currently thrown away rather than built.
+3. **Mitred sidewalk offsets**, to recover the nine dropped rings and stop the failure mode
+   recurring on a curvier city.
+4. **Spline-mesh roads** off the `RoadSplines` pin, with lane markings, which is what the
+   pin was left connected-ready for.
+5. **A height-fidelity metric.** The verifier checks that heights come from real tags; it
+   does not measure *error*. Holding out stated heights and scoring the estimator against
+   them per area would turn "plausible" into a number.
+6. **Fetch-time trimming of very long ways**, if the extent overrun ever matters visually —
+   though keeping boundary features whole is the right default.
 
 
 ### Verification
@@ -345,11 +325,12 @@ height-provenance histogram against the tag coverage the source actually has:
 
 ```
 ok=True  errors=0  warnings=0
-nodes: extrude 1651, mesh 864, ribbon 173, total 2688
+nodes: extrude 2294, mesh 344, ribbon 173, total 2811
   origin matches the requested bbox centre
   worst vertex 0.7 cm from an independent WGS84 tangent-plane projection (409 sampled)
   median road bearing 118.6° vs 118.2° recomputed from source (delta 0.5°)
-  98% of volumes cite a stated tag; source share is 94%
+  1648 volumes from 1779 source building features (93%)
+  98% of building volumes cite a stated tag; source share is 94%
 ```
 
 Reproduce with:
@@ -358,7 +339,7 @@ Reproduce with:
 python3 agent_scripts/nyc_midtown/pipeline.py --area nyc_midtown --verify
 tools/verify_area.sh nyc_midtown
 tools/stage_area.sh nyc_midtown
-tools/render_overhead.py --area nyc_midtown        # regenerates both SVGs above
+tools/render_overhead.py --area nyc_midtown        # regenerates the SVG panels
 ```
 
 ---
