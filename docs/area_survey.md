@@ -163,7 +163,7 @@ on a scored axis while its weakness lands on an unscored one. Midtown also keeps
 larger and better-articulated 3D layer (524 parts, 521 with heights, versus Boston's
 267) and avoids the Big Dig's 13 tunnels and 24 layered ways.
 
-The cost of that choice, to be disclosed in `report.md` rather than glossed over: **no
+The cost of that choice, to be disclosed in `report.html` rather than glossed over: **no
 road in the area states a width**, so every carriageway width is derived — from `lanes`
 for 49% of driveable length, from the highway class alone for the other 51%. Manhattan
 avenues are considerably wider than a generic `primary` default, so road widths are the

@@ -35,7 +35,7 @@ UnrealProject/        UE 5.7 project "CityGen"
   Content/Blueprints/ BP_CityGenerator
   Scripts/            UE editor Python (asset/level authoring, headless)
 tools/                agent_task / verify_area / stage_area / build_ue / ue_run / find_python
-docs/                 agent-prompts/, area_survey.*, hermes-service.md, report.md
+docs/                 report.html + figures, agent-prompts/, area_survey.*, hermes-service.md
 demo/                 demo.mp4 (mandatory 30–90 s)
 ```
 
@@ -187,4 +187,4 @@ be derived as faces of the road graph; the underground is excluded rather than m
 spans 1438 x 1245 m against a 611 x 591 m request because Overpass returns intersecting
 ways whole; `demo/demo.mp4` (30-90 s) is not recorded.
 
-`docs/report.md` is current with all of the above.
+`docs/report.html` is current with all of the above.

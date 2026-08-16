@@ -133,7 +133,7 @@ tools/                      agent_task / verify_area / stage_area / build_ue / u
 - [x] PCG graph `PCG_City` + `BP_CityGenerator`, regenerating on level load
 - [x] Independent verification against the OSM source (`osm_verify_scene`)
 - [ ] Roof meshes for the shapes the area actually tags
-- [x] [`docs/report.md`](docs/report.md) with the overhead generated-vs-OSM side-by-side
+- [x] [`docs/report.html`](docs/report.html) with the overhead generated-vs-OSM side-by-side
 - [ ] `demo/demo.mp4` (30–90 s fly-through)
 
 Data © OpenStreetMap contributors, ODbL.
