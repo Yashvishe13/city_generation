@@ -81,6 +81,30 @@ def ring_problems(ring: list[list[float]]) -> list[str]:
     return problems
 
 
+BUILDING_TAGS = {"building", "building:part"}
+
+
+def _building_extrudes(nodes: list) -> list:
+    """Extrudes that are building massing, not raised pedestrian surfaces.
+
+    A curb is a prism too: sidewalks, plazas and traffic islands are `extrude` nodes with
+    base_cm 0 and a ~19 cm top, because a flat plate at +19 cm has no curb face and hangs
+    in the air. That means `kind == "extrude"` on its own no longer means "a building", and
+    two checks below divide by a count of source *buildings* - so counting every extrude
+    would report coverage as 135% of the source buildings and dilute the height-provenance
+    share from 98% to about 67% with surfaces that were never meant to carry a stated
+    height. Measured on a scene with the curb fix simulated, not estimated.
+
+    Scope by tag. If a scene tags nothing, fall back to every extrude rather than reporting
+    zero, since the older contract had no pedestrian prisms to confuse it with.
+    """
+    tagged = [n for n in nodes
+              if n.get("kind") == "extrude" and BUILDING_TAGS & set(n.get("tags") or [])]
+    if tagged:
+        return tagged
+    return [n for n in nodes if n.get("kind") == "extrude"]
+
+
 class Finding(dict):
     """One check result, shaped for an agent to act on rather than to read."""
 
@@ -432,7 +456,7 @@ def _verify_against_source(scene: dict, nodes: list, geojson_path: Path,
     source_buildings = sum(1 for f in features
                            if "building" in (f.get("properties") or {})
                            or "building:part" in (f.get("properties") or {}))
-    emitted = sum(1 for n in nodes if n.get("kind") == "extrude")
+    emitted = len(_building_extrudes(nodes))
     kept = emitted / source_buildings if source_buildings else 0
     findings.append(Finding(
         "coverage", kept >= 0.5,
@@ -458,7 +482,7 @@ def _verify_against_source(scene: dict, nodes: list, geojson_path: Path,
                         or (f.get("properties") or {}).get("building:levels"))
     source_share = source_tagged / len(building_features) if building_features else 0.0
 
-    extrudes_here = [n for n in nodes if n.get("kind") == "extrude"]
+    extrudes_here = _building_extrudes(nodes)
     # Both prefixes mean "derived from a tag stated on this feature": tag:height reads it
     # directly, building:levels*Xm applies a fitted ratio to a stated storey count. The
     # source denominator counts the same two tags, so the shares are comparable.
