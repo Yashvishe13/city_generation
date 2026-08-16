@@ -90,6 +90,22 @@ fitting a number and inventing one.
 ordering. A tunnel emitted at street level paves over the road above it
 (`osm:scene-contract`).
 
+## What is below grade
+
+Count it across **every class, not just highways**. For each of `location=underground`,
+`layer<0`, `tunnel`, `indoor=yes` and `level<0`, report how many buildings, highways,
+railways and ground-cover features carry it.
+
+Midtown has 110 highways and **3 buildings**. Those three buildings are subway station
+complexes spanning up to 737 m, and extruded at street level they set the entire scene's
+extent — so this is not a footnote, it is the measurement that decides whether the scene
+is the size it claims to be. A count of zero is worth knowing too; a count you never took
+is how they end up standing on the road (`osm:scene-contract`).
+
+Watch for the same landmark appearing twice, once above ground and once below: Grand
+Central Terminal is one feature at street level and another as an underground concourse.
+Report them separately rather than as one name.
+
 ## What to do with the numbers
 
 Nothing about these measurements is decorative:
@@ -105,3 +121,5 @@ Nothing about these measurements is decorative:
   silence.
 - unextrudable rings present → repair or drop them explicitly, with the count and the
   reason in the manifest.
+- anything below grade → exclude it from the ground-level scene, or place it at its stated
+  `layer`; never extrude it at Z = 0, whatever class it belongs to.

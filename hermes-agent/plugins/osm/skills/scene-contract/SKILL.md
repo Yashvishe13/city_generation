@@ -87,6 +87,39 @@ A node can satisfy every rule above and still render badly, because the renderer
 The ground slab sits just below zero, so ordinary road ribbons a few centimetres above it
 are fine. The problem is always ribbons against *each other*.
 
+## Below grade is a test, not a feature class
+
+A city has an underground, and OSM maps it in the same tag space as everything else. None
+of it belongs at Z = 0. Before emitting **any** primitive — extrude, mesh or ribbon — apply
+one test, in this order of reliability:
+
+```
+location = underground      layer < 0       tunnel = *
+indoor   = yes              level < 0
+```
+
+Any one of them means the feature is not at ground level. Exclude it and count it by
+reason, or place it at its stated `layer` if you are deliberately modelling the
+underground. What you may not do is extrude it standing on the street.
+
+This applies to **every class, buildings included** — that is the part that has been
+missed. In the Midtown extract 110 highways and **3 buildings** carry a below-grade
+marker, and those three are Grand Central Terminal, Times Square–42nd Street/Port
+Authority and 34th Street–Herald Square: subway station complexes tagged
+`building=train_station`, spanning up to 737 m, which extruded at grade become solid
+blocks lying across the map and take the whole scene to roughly six times its requested
+ground area.
+
+**Test the tags, never the feature type.** Grand Central Terminal appears in this extract
+*twice*: `relation/11171793` is the underground concourse (`location=underground`,
+`layer=-2`) and must go; `way/265947358` is the actual terminal building, carries no
+below-grade marker at all, and must stay. A rule that excludes `building=train_station`
+deletes a real landmark. A rule that excludes `location=underground` keeps it.
+
+The same test is what keeps 88 indoor and tunnel footways out of the pedestrian network
+(`osm:roads`) and subway lines out of the ground plane (`osm:ground-cover`). One test,
+applied everywhere, rather than a special case per tag family.
+
 ## Semantics and provenance
 
 `tags` carry meaning (`building`, `building:part`, `roof`, `road`, the highway class,

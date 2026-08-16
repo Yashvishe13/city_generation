@@ -49,10 +49,10 @@ different composition elsewhere and measure it rather than porting these numbers
 ## 3. The trap: most `railway` here is under the street
 
 58 `railway=subway`, 38 `rail`, 23 `platform`. Emitted at grade they lay a rail network
-over Midtown's streets. This is the same failure as the 93 indoor and tunnel footways in
-`osm:roads`, in a new tag family: **check `tunnel`, `layer` and `location=underground`
-before emitting anything from `railway`**, and exclude what is below grade. Surface rail
-is real and worth having; in a dense downtown extract there is usually none of it.
+over Midtown's streets. Apply the below-grade test from `osm:scene-contract` — the same one
+that keeps 88 indoor and tunnel footways out of the pedestrian network and three subway
+complexes out of the building massing — before emitting anything from `railway`. Surface
+rail is real and worth having; in a dense downtown extract there is usually none of it.
 
 ## 4. Nesting: draw the biggest thing first, the smallest last
 
