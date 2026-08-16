@@ -29,7 +29,7 @@ their parents, roofs with `roof:height`, setbacks starting above ground, and **z
 carrying a `width` tag.
 
 The scope is deliberate: a few city blocks to a small district. At 0.36 km² this sits at
-the district end — 27 blocks, 1,651 building volumes, 18.7 km of carriageway — large
+the district end — 27 blocks, 1,648 building volumes, 18.7 km of carriageway — large
 enough that the street grid, the block structure and a real skyline range (3.7 m to 397 m)
 are all present, and small enough that every feature can be checked against the source
 rather than sampled.
